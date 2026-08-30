@@ -41,6 +41,12 @@ with an `error` event instead of silently skipping a step.
    tool config's `app_settings` and the run's language. Apply the settings,
    pop to the home screen, close dialogs. A re-recording must match the first
    take.
+   **Pair it with `onRestore`**, which fires once the tool disconnects: the
+   demo account and demo backend URL land in the app's real preferences, and
+   whatever reads them — a settings screen, a polling background task — keeps
+   using them after the recording unless something puts the user's own values
+   back. Snapshot on the first `onPrepare`, not on every one, or a two-demo run
+   restores demo state.
 2. **Keys on everything a demo taps.** `key: const ValueKey('settings_button')`
    on the `IconButton`, not on its icon. Keys are the contract between the
    config/registry and the UI.

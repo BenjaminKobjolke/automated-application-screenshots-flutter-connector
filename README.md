@@ -19,11 +19,11 @@ Pure Dart package, no executable — the Flutter twin of the
 | `steps.dart` | Step model (`TapStep`, `TypeTextStep`, `PauseStep`, `ScreenshotStep`, `CustomStep`), `DemoScript`, JSON codec, `localizeSteps`, `estimatedDuration` |
 | `registry.dart` | `DemoRegistry` — id → script, `customActions` for `custom` steps, `UnknownDemoError` |
 | `protocol.dart` | `StartCommand` (tool → app) and `DemoEvents` encoders (app → tool) |
-| `client.dart` | `DemoClient` — TCP link, `start` command stream, event lines + raw mp4 upload; never throws into the app |
+| `client.dart` | `DemoClient` — TCP link, `start` command stream, event lines + raw mp4 upload; never throws into the app. `connectWithRetry` + `ConnectRetry` keep waiting for the tool, so app and tool start in either order |
 | `still_capture.dart` | `StillCapture` — `RepaintBoundary.toImage` → PNG bytes |
 | `screen_recorder.dart` | `ScreenRecorder` interface + `PluginScreenRecorder` (`flutter_screen_recording`) |
 | `step_executor.dart` | `StepExecutor` — taps by `ValueKey` via synthesized pointer events, types into the focused field, runs custom actions |
-| `demo_host.dart` | `AutomationDemoHost` — the widget that wires it all; inert without `AUTOMATION_HOST` |
+| `demo_host.dart` | `AutomationDemoHost` — the widget that wires it all; `onPrepare` per demo, `onRestore` when the tool hangs up; inert without `AUTOMATION_HOST` |
 
 ## Install
 
@@ -59,15 +59,29 @@ AutomationDemoHost(
     await applySettings(settings);             // tool config app_settings
     navigatorKey.currentState?.popUntil((r) => r.isFirst);
   },
+  onRestore: () async => restoreSettings(),    // after the tool disconnects
   child: MaterialApp(navigatorKey: navigatorKey, home: const HomeScreen()),
 )
 ```
 
+- `onPrepare` writes to the app's real stores, so give it an `onRestore` that
+  puts the user's own state back. It runs once, after the tool disconnects and
+  the last demo has finished — not after each demo.
 - Widgets a demo taps carry `key: const ValueKey('settings_button')`.
 - Run the app with `--dart-define=AUTOMATION_HOST=<pc ip>:<port>` (emulator:
   `10.0.2.2`). Without it the host renders the child and does nothing.
 - On the PC: `uv run screenshot-tool --config your.json --demo all` with
-  `"network": {"port": 8765}` in the config — it waits for the app to connect.
+  `"network": {"port": 8765}` in the config.
+- **Start order does not matter.** The app retries for 3 minutes
+  (`ConnectRetry`), which outlasts the tool's own 30 s accept window, so
+  whichever side comes up first waits for the other. Watch for
+  `waiting for demo tool at ...` then `connected to demo tool at ...` in the
+  `flutter run` console; both are logged under `automated_screenshot_connector`
+  via `dart:developer`, so they show there but are easy to miss in raw
+  `adb logcat`.
+- The PC must actually accept the inbound connection: on Windows the tool's
+  listener needs TCP `<port>` allowed through the firewall, and a network
+  classified *Public* blocks it silently — neither side logs a dropped SYN.
 
 Demo content stays in your app; see [docs/WRITING_DEMOS.md](docs/WRITING_DEMOS.md).
 `block-screen-app` (`lib/demos/demo_registry.dart`,

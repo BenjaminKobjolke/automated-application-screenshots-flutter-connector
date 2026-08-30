@@ -1,17 +1,19 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:automated_screenshot_connector/automated_screenshot_connector.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/demo_server.dart';
+
 void main() {
+  silenceLogger();
+
   test('client receives start commands and sends lines plus raw bytes',
       () async {
-    AppLogger.enabled = false;
-    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final server = await bindLoopback();
     final accepted = server.first;
-    final client = (await DemoClient.connect('127.0.0.1', server.port))!;
+    final client = (await DemoClient.connect(loopbackHost, server.port))!;
     final conn = await accepted;
     final received = <int>[];
     final done = conn.listen(received.addAll).asFuture<void>();
@@ -37,10 +39,49 @@ void main() {
   });
 
   test('connect returns null when nothing listens', () async {
-    AppLogger.enabled = false;
-    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    final port = server.port;
+    expect(await DemoClient.connect(loopbackHost, await deadPort()), isNull);
+  });
+
+  test('connectWithRetry waits for a tool that starts later', () async {
+    final port = await deadPort();
+    final pending = DemoClient.connectWithRetry(loopbackHost, port,
+        retry: fastRetry);
+
+    // The tool only starts listening after the first attempts have failed.
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final server = await bindLoopback(port);
+    final accepted = server.first;
+
+    final client = await pending;
+    expect(client, isNotNull);
+
+    // Tear down the way the host does: something must listen to `commands`
+    // before close(), and the tool side must go first — a socket's close
+    // future only completes once its peer has closed too.
+    final sub = client!.commands.listen((_) {});
+    (await accepted).destroy();
+    await client.close();
+    await sub.cancel();
     await server.close();
-    expect(await DemoClient.connect('127.0.0.1', port), isNull);
+  });
+
+  test('connectWithRetry gives up once its timeout elapses', () async {
+    final port = await deadPort();
+    final started = DateTime.now();
+    final client = await DemoClient.connectWithRetry(loopbackHost, port,
+        retry: expiringRetry);
+    expect(client, isNull);
+    expect(DateTime.now().difference(started),
+        lessThan(const Duration(seconds: 5)));
+  });
+
+  test('connectWithRetry stops as soon as it is cancelled', () async {
+    final port = await deadPort();
+    var cancelled = false;
+    final pending = DemoClient.connectWithRetry(loopbackHost, port,
+        retry: patientRetry, isCancelled: () => cancelled);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    cancelled = true;
+    expect(await pending, isNull);
   });
 }

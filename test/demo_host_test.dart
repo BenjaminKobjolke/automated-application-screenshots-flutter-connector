@@ -6,6 +6,8 @@ import 'package:automated_screenshot_connector/automated_screenshot_connector.da
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/demo_server.dart';
+
 class FakeRecorder implements ScreenRecorder {
   final started = <String>[];
   var stopped = 0;
@@ -76,9 +78,10 @@ Future<(List<Map<String, dynamic>>, List<int>)> readRun(Socket conn) async {
 }
 
 void main() {
+  silenceLogger();
+
   testWidgets('a start command drives prepare, steps, stills and video',
       (tester) async {
-    AppLogger.enabled = false;
     final recorder = FakeRecorder();
     final prepared = <String>[];
     var customCalls = 0;
@@ -94,10 +97,10 @@ void main() {
       ..customActions['reset'] = () async => customCalls++;
 
     await tester.runAsync(() async {
-      final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final server = await bindLoopback();
       final accepted = server.first;
       await tester.pumpWidget(AutomationDemoHost(
-        host: '127.0.0.1:${server.port}',
+        host: '$loopbackHost:${server.port}',
         registry: registry,
         recorder: recorder,
         onPrepare: (settings, language) async =>
@@ -143,12 +146,11 @@ void main() {
   });
 
   testWidgets('an unknown demo is reported as an error event', (tester) async {
-    AppLogger.enabled = false;
     await tester.runAsync(() async {
-      final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final server = await bindLoopback();
       final accepted = server.first;
       await tester.pumpWidget(AutomationDemoHost(
-        host: '127.0.0.1:${server.port}',
+        host: '$loopbackHost:${server.port}',
         registry: DemoRegistry(),
         recorder: FakeRecorder(),
         child: const SizedBox(),
@@ -163,13 +165,86 @@ void main() {
     });
   });
 
+  testWidgets('the tool disconnecting restores the app state after the demo',
+      (tester) async {
+    final calls = <String>[];
+    final registry = DemoRegistry()
+      ..add([const DemoScript(id: 1, name: 'noop', steps: [CustomStep('mark')])])
+      ..customActions['mark'] = () async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        calls.add('demo');
+      };
+
+    await tester.runAsync(() async {
+      final server = await bindLoopback();
+      final accepted = server.first;
+      await tester.pumpWidget(AutomationDemoHost(
+        host: '$loopbackHost:${server.port}',
+        registry: registry,
+        onPrepare: (settings, language) async => calls.add('prepare'),
+        onRestore: () async => calls.add('restore'),
+        child: const SizedBox(),
+      ));
+      final conn = await accepted;
+      conn.write('${jsonEncode({'command': 'start', 'demo': 1})}\n');
+      await conn.flush();
+      // The tool hangs up while the demo is still playing: the run has to
+      // finish before the app puts its own state back.
+      await conn.close();
+
+      final deadline = DateTime.now().add(const Duration(seconds: 20));
+      while (calls.length < 3 && DateTime.now().isBefore(deadline)) {
+        await tester.pump(const Duration(milliseconds: 16));
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+      await server.close();
+
+      expect(calls, ['prepare', 'demo', 'restore']);
+    });
+  });
+
   testWidgets('without a host the child renders and nothing connects',
       (tester) async {
-    await tester.pumpWidget(AutomationDemoHost(
-      host: '',
-      registry: DemoRegistry(),
-      child: const Text('plain', textDirection: TextDirection.ltr),
-    ));
-    expect(find.text('plain'), findsOneWidget);
+    await tester.runAsync(() async {
+      final server = await bindLoopback();
+      await tester.pumpWidget(AutomationDemoHost(
+        host: '',
+        registry: DemoRegistry(),
+        child: const Text('plain', textDirection: TextDirection.ltr),
+      ));
+      final connections =
+          await connectionsWithin(server, const Duration(milliseconds: 200));
+      await server.close();
+
+      expect(find.text('plain'), findsOneWidget);
+      expect(connections, isZero);
+    });
+  });
+
+  test('demo mode is off without the dart-define', () {
+    // The test binary is built without AUTOMATION_HOST, so apps keep their
+    // debug banner (and anything else keyed off this) in normal runs.
+    expect(demoModeEnabled, isFalse);
+  });
+
+  testWidgets('disposing the host stops the retry loop', (tester) async {
+    await tester.runAsync(() async {
+      final port = await deadPort();
+      await tester.pumpWidget(AutomationDemoHost(
+        host: '$loopbackHost:$port',
+        registry: DemoRegistry(),
+        retry: patientRetry,
+        child: const SizedBox(),
+      ));
+      await tester.pumpWidget(const SizedBox());
+
+      // The tool turns up after the host is gone; nothing may still be waiting.
+      final server = await bindLoopback(port);
+      final connections =
+          await connectionsWithin(server, const Duration(milliseconds: 300));
+      await server.close();
+
+      expect(connections, isZero);
+    });
   });
 }

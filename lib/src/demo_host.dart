@@ -19,8 +19,24 @@ import 'still_capture.dart';
 typedef PrepareCallback = Future<void> Function(
     Map<String, String> settings, String? language);
 
+/// Undoes what a [PrepareCallback] changed, once the tool has disconnected.
+///
+/// [PrepareCallback] runs per demo and normally writes to the app's real
+/// stores, so without this the device is left in the demo's state — a demo
+/// backend URL the app then keeps polling long after the recording ended.
+typedef RestoreCallback = Future<void> Function();
+
 /// `--dart-define` key naming the tool's `ip:port`.
 const String automationHostDefine = 'AUTOMATION_HOST';
+
+/// True when the app was built with [automationHostDefine], i.e. to be recorded.
+///
+/// Lets the app strip anything that would end up in the captured frames but is
+/// not part of the product — most obviously
+/// `MaterialApp.debugShowCheckedModeBanner`, since demos run a debug build and
+/// the connector's `RepaintBoundary` sits above `MaterialApp`, so the banner
+/// lands in every still.
+const bool demoModeEnabled = bool.hasEnvironment(automationHostDefine);
 
 /// Wraps the app and plays demos on the recording tool's command.
 ///
@@ -33,8 +49,10 @@ class AutomationDemoHost extends StatefulWidget {
     required this.child,
     required this.registry,
     this.onPrepare,
+    this.onRestore,
     this.host = const String.fromEnvironment(automationHostDefine),
     this.recorder = const PluginScreenRecorder(),
+    this.retry = const ConnectRetry(),
   });
 
   /// The app.
@@ -46,11 +64,17 @@ class AutomationDemoHost extends StatefulWidget {
   /// Called with the run's settings and language before each demo.
   final PrepareCallback? onPrepare;
 
+  /// Called once after the tool disconnects, to undo [onPrepare].
+  final RestoreCallback? onRestore;
+
   /// `ip:port` of the tool; empty = demo mode off.
   final String host;
 
   /// Screen recorder used for video demos.
   final ScreenRecorder recorder;
+
+  /// How long to keep waiting for the tool; see [DemoClient.connectWithRetry].
+  final ConnectRetry retry;
 
   @override
   State<AutomationDemoHost> createState() => _AutomationDemoHostState();
@@ -74,11 +98,16 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
       AppLogger.e('$automationHostDefine must be ip:port, got "${widget.host}"');
       return;
     }
-    final client = await DemoClient.connect(parts[0], port);
+    // Retries, so the tool may be started before or after the app.
+    final client = await DemoClient.connectWithRetry(parts[0], port,
+        retry: widget.retry, isCancelled: () => !mounted);
     if (client == null || !mounted) return;
     _client = client;
-    // Demos run strictly one after another; asyncMap serializes them.
-    _subscription = client.commands.asyncMap(_runDemo).listen((_) {});
+    // Demos run strictly one after another; asyncMap serializes them, and it
+    // holds the stream's done event back until the last demo has finished —
+    // which is what lets the restore run after the run rather than during it.
+    _subscription =
+        client.commands.asyncMap(_runDemo).listen((_) {}, onDone: _restore);
   }
 
   Future<void> _runDemo(StartCommand command) async {
@@ -119,6 +148,15 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
       if (command.video) {
         await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       }
+    }
+  }
+
+  /// Hands the app back its own state; failures must not break teardown.
+  Future<void> _restore() async {
+    try {
+      await widget.onRestore?.call();
+    } on Object catch (e, stack) {
+      AppLogger.e('restoring the app state failed', error: e, stackTrace: stack);
     }
   }
 
