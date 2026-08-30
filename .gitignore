@@ -1,0 +1,12 @@
+.dart_tool/
+.fvm/
+build/
+.packages
+pubspec.lock
+.claude/
+claude-plans/
+/PLAN_*.md
+tmp/
+*.iml
+.idea/
+coding-rules.json
