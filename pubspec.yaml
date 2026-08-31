@@ -10,7 +10,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_screen_recording: ^2.0.25
+  # Upstream 2.0.25 still calls jcenter(); Gradle 9 removed it. Fork with the fix.
+  flutter_screen_recording:
+    git:
+      url: https://github.com/BenjaminKobjolke/flutter_screen_recording.git
+      ref: e3b7ac61a38b4bb64fa82feba5d2729ab99f7e3a
+      path: flutter_screen_recording
 
 dev_dependencies:
   flutter_test:
