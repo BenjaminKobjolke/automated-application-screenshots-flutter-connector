@@ -6,6 +6,8 @@ pubspec.lock
 .claude/
 claude-plans/
 /PLAN_*.md
+PLAN.md
+HANDOFF.md
 tmp/
 *.iml
 .idea/
