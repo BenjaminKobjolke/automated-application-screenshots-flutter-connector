@@ -8,9 +8,10 @@ import 'protocol.dart';
 
 /// How long, and how often, the app keeps trying to reach the demo tool.
 ///
-/// The tool listens for 30 s once started, while `flutter run` can spend
-/// minutes building and installing. Retrying for longer than the tool's own
-/// window is what makes the two startable in either order.
+/// The tool listens for its `network.accept_timeout` (30 s by default) once
+/// started, while `flutter run` can spend minutes building and installing.
+/// Retrying for longer than the tool's own window is what makes the two
+/// startable in either order.
 class ConnectRetry {
   /// Creates the policy; the defaults outlast a `flutter run` build + install.
   const ConnectRetry({

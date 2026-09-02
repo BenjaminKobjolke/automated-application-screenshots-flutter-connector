@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:automated_screenshot_connector/automated_screenshot_connector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/demo_server.dart';
@@ -75,6 +75,61 @@ Future<(List<Map<String, dynamic>>, List<int>)> readRun(Socket conn) async {
   }
   await sub.cancel();
   return (events, <int>[]);
+}
+
+/// Pumps the tree and the event loop until [done] or the deadline passes.
+///
+/// The host's teardown runs on real sockets and real timers, so a test has to
+/// keep both the widget binding and the Dart event loop turning while waiting.
+Future<void> pumpUntil(
+  WidgetTester tester,
+  bool Function() done, {
+  Duration timeout = const Duration(seconds: 20),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!done() && DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 16));
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+  }
+}
+
+/// Records the `flutter/platform` calls the host makes - the app-closing
+/// `SystemNavigator.pop` among them.
+List<String> capturePlatformCalls(WidgetTester tester) {
+  final calls = <String>[];
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    SystemChannels.platform,
+    (call) async {
+      calls.add(call.method);
+      return null;
+    },
+  );
+  return calls;
+}
+
+/// Plays one no-op demo, then hangs up the way the tool does at the end of a
+/// run, and waits for the host's teardown to settle.
+Future<void> playRunAndDisconnect(
+  WidgetTester tester, {
+  required bool exitWhenDone,
+  required bool Function() done,
+  Duration timeout = const Duration(seconds: 20),
+}) async {
+  final server = await bindLoopback();
+  final accepted = server.first;
+  await tester.pumpWidget(AutomationDemoHost(
+    host: '$loopbackHost:${server.port}',
+    registry: DemoRegistry()
+      ..add([const DemoScript(id: 1, name: 'noop', steps: [])]),
+    exitWhenDone: exitWhenDone,
+    child: const SizedBox(),
+  ));
+  final conn = await accepted;
+  conn.write('${jsonEncode({'command': 'start', 'demo': 1})}\n');
+  await conn.flush();
+  await conn.close();
+  await pumpUntil(tester, done, timeout: timeout);
+  await server.close();
 }
 
 void main() {
@@ -192,15 +247,37 @@ void main() {
       // finish before the app puts its own state back.
       await conn.close();
 
-      final deadline = DateTime.now().add(const Duration(seconds: 20));
-      while (calls.length < 3 && DateTime.now().isBefore(deadline)) {
-        await tester.pump(const Duration(milliseconds: 16));
-        await Future<void>.delayed(const Duration(milliseconds: 16));
-      }
+      await pumpUntil(tester, () => calls.length == 3);
       await server.close();
 
       expect(calls, ['prepare', 'demo', 'restore']);
     });
+  });
+
+  testWidgets('the app closes itself once the run is over', (tester) async {
+    final calls = capturePlatformCalls(tester);
+
+    await tester.runAsync(() => playRunAndDisconnect(
+          tester,
+          exitWhenDone: true,
+          done: () => calls.contains('SystemNavigator.pop'),
+        ));
+
+    expect(calls, contains('SystemNavigator.pop'));
+  });
+
+  testWidgets('exitWhenDone: false leaves the app running', (tester) async {
+    final calls = capturePlatformCalls(tester);
+
+    // Nothing to wait for, so this one runs to its (short) deadline.
+    await tester.runAsync(() => playRunAndDisconnect(
+          tester,
+          exitWhenDone: false,
+          done: () => false,
+          timeout: const Duration(seconds: 2),
+        ));
+
+    expect(calls, isNot(contains('SystemNavigator.pop')));
   });
 
   testWidgets('without a host the child renders and nothing connects',

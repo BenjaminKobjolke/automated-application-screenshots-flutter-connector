@@ -9,8 +9,10 @@ recording) and captures pixel-exact stills in-app; the tool receives both and
 exports `demo.gif` / `demo.mp4` / `<still>.png` into its usual output layout.
 Wire protocol: the tool's `docs/AUTOMATION_INTERFACE.md`, section 7.
 
-Pure Dart package, no executable — the Flutter twin of the
+The Flutter twin of the
 [python connector](../automated-application-screenshots-python-connector).
+The library itself is pure Dart; it also ships one host-side script,
+`ensure_device` (see below).
 
 ## What's inside
 
@@ -23,7 +25,7 @@ Pure Dart package, no executable — the Flutter twin of the
 | `still_capture.dart` | `StillCapture` — `RepaintBoundary.toImage` → PNG bytes |
 | `screen_recorder.dart` | `ScreenRecorder` interface + `PluginScreenRecorder` (`flutter_screen_recording`) |
 | `step_executor.dart` | `StepExecutor` — taps by `ValueKey` via synthesized pointer events, types into the focused field, runs custom actions |
-| `demo_host.dart` | `AutomationDemoHost` — the widget that wires it all; `onPrepare` per demo, `onRestore` when the tool hangs up; inert without `AUTOMATION_HOST` |
+| `demo_host.dart` | `AutomationDemoHost` — the widget that wires it all; `onPrepare` per demo, `onRestore` then `exitWhenDone` when the tool hangs up; inert without `AUTOMATION_HOST` |
 
 ## Install
 
@@ -67,14 +69,20 @@ AutomationDemoHost(
 - `onPrepare` writes to the app's real stores, so give it an `onRestore` that
   puts the user's own state back. It runs once, after the tool disconnects and
   the last demo has finished — not after each demo.
+- **The app closes itself when the run is over**, right after `onRestore`, so
+  the device says plainly that the recording finished instead of sitting on a
+  home screen that looks identical to one still being recorded. Pass
+  `exitWhenDone: false` to keep it open.
 - Widgets a demo taps carry `key: const ValueKey('settings_button')`.
 - Run the app with `--dart-define=AUTOMATION_HOST=<pc ip>:<port>` (emulator:
   `10.0.2.2`). Without it the host renders the child and does nothing.
 - On the PC: `uv run screenshot-tool --config your.json --demo all` with
   `"network": {"port": 8765}` in the config.
 - **Start order does not matter.** The app retries for 3 minutes
-  (`ConnectRetry`), which outlasts the tool's own 30 s accept window, so
-  whichever side comes up first waits for the other. Watch for
+  (`ConnectRetry`); the tool waits `network.accept_timeout` (default 30 s, raise
+  it when the run also boots an emulator and builds the app). Whichever side
+  comes up first waits for the other, as long as one of those two windows covers
+  the gap. Watch for
   `waiting for demo tool at ...` then `connected to demo tool at ...` in the
   `flutter run` console; both are logged under `automated_screenshot_connector`
   via `dart:developer`, so they show there but are easy to miss in raw
@@ -86,6 +94,89 @@ AutomationDemoHost(
 Demo content stays in your app; see [docs/WRITING_DEMOS.md](docs/WRITING_DEMOS.md).
 `block-screen-app` (`lib/demos/demo_registry.dart`,
 `tools/create_media/`) is the working reference.
+
+## Starting a device (`ensure_device`)
+
+Recording needs a booted Android device. Rather than each app reinventing that,
+the connector ships it as a script, so any app that already depends on the
+package can call it in one line — pub resolves the package's location, so no app
+needs to know where this repo is checked out:
+
+```
+fvm dart run automated_screenshot_connector:ensure_device
+```
+
+It reuses whatever `adb` already lists and only launches an emulator when
+nothing usable is attached, then waits for `sys.boot_completed` (up to 180 s).
+Exit code 0 means a device is ready.
+
+| variable | effect |
+|---|---|
+| `DEMO_EMULATOR` | AVD to launch. Empty: the first id `flutter emulators` lists. |
+
+Selecting *which* attached device the app then runs on is the calling app's job
+(`flutter run -d <serial>`), not this script's — it only guarantees one exists.
+
+### Creating the AVD
+
+`ensure_device` boots an emulator but does not create one. Make it once, in
+Android Studio — **View → Tool Windows → Device Manager**, then **+ → Create
+Virtual Device**:
+
+1. Pick a device definition (Pixel 9 or similar) and a recent system image.
+2. Open **Additional settings** (older versions: **Show Advanced Settings**) and
+   raise **Internal Storage**. This is the setting that matters, and the default
+   is too small — see below.
+3. Name it for the job, e.g. `Pixel_9_Demos`, so recordings never fight with the
+   emulator you develop on. Put that name in `DEMO_EMULATOR`; the id
+   `flutter emulators` lists is the name with spaces replaced by underscores.
+
+**Give it enough space.** A debug build of a Flutter app with plugins is large —
+around 160 MB for `block-screen-app` — and a streamed install needs several
+times that free while it runs. A default AVD ships ~6 GB of internal storage, of
+which the system image and Google apps take most: a fresh one left ~5.1 GB free,
+but one that had been developed on for a while was down to ~600 MB, and installs
+failed there. **16 GB is a comfortable setting** and costs nothing up front —
+the disk image is sparse and only grows as it fills.
+
+Set it at creation. Changing Internal Storage on an existing AVD generally means
+wiping its data, so it is easier to make a second AVD than to resize one.
+
+Check what a running emulator actually has left:
+
+```
+adb shell df /data
+```
+
+If the free column is a few hundred MB, installs fail with
+`INSTALL_FAILED_INSUFFICIENT_STORAGE: Failed to override installation location`
+— which surfaces as the app never connecting, because `flutter run` dies before
+the app ever starts. `adb shell pm trim-caches 8G` may buy a little room; a
+roomier AVD is the real fix.
+
+### Skipping the recording consent prompt
+
+Every video demo otherwise stops on Android's *Share your screen with …?*
+dialog, and someone has to tap **Share screen**. On a development device or
+emulator you can pre-grant the capture app op once, and the recording starts
+unattended:
+
+```
+adb shell appops set <your.package.id> PROJECT_MEDIA allow
+```
+
+Check it with `adb shell appops get <your.package.id> PROJECT_MEDIA`: after a
+recording the entry reads `allow; time=…`, where `time` is when capture last
+actually used it.
+
+- Set it **per AVD/device, once**. It survives `adb install -r`, so a normal
+  `flutter run` reinstall keeps it; uninstalling the app or wiping the AVD
+  clears it.
+- Verified on an Android 17 (API 37) emulator. This is a debugging aid for
+  machines you control — it does not change what a released app does, and real
+  users always see the dialog.
+- Without it, the tool waits at `Waiting for the app (accept the recording
+  prompt on the phone)...` and the run fails on the event timeout if nobody taps.
 
 ## Development
 

@@ -53,6 +53,7 @@ class AutomationDemoHost extends StatefulWidget {
     this.host = const String.fromEnvironment(automationHostDefine),
     this.recorder = const PluginScreenRecorder(),
     this.retry = const ConnectRetry(),
+    this.exitWhenDone = true,
   });
 
   /// The app.
@@ -75,6 +76,14 @@ class AutomationDemoHost extends StatefulWidget {
 
   /// How long to keep waiting for the tool; see [DemoClient.connectWithRetry].
   final ConnectRetry retry;
+
+  /// Whether to close the app once the run is over and [onRestore] has run.
+  ///
+  /// The app vanishing from the screen is the only signal on the device that
+  /// the recording finished — a demo build left sitting on its home screen
+  /// looks exactly like one still recording. Only ever reached in a build
+  /// carrying [automationHostDefine].
+  final bool exitWhenDone;
 
   @override
   State<AutomationDemoHost> createState() => _AutomationDemoHostState();
@@ -107,7 +116,7 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
     // holds the stream's done event back until the last demo has finished —
     // which is what lets the restore run after the run rather than during it.
     _subscription =
-        client.commands.asyncMap(_runDemo).listen((_) {}, onDone: _restore);
+        client.commands.asyncMap(_runDemo).listen((_) {}, onDone: _finish);
   }
 
   Future<void> _runDemo(StartCommand command) async {
@@ -151,13 +160,17 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
     }
   }
 
-  /// Hands the app back its own state; failures must not break teardown.
-  Future<void> _restore() async {
+  /// Hands the app back its own state and closes it; failures must not break
+  /// teardown — the app still has to exit when the restore threw.
+  Future<void> _finish() async {
     try {
       await widget.onRestore?.call();
     } on Object catch (e, stack) {
       AppLogger.e('restoring the app state failed', error: e, stackTrace: stack);
     }
+    if (!widget.exitWhenDone) return;
+    AppLogger.i('run finished; closing the app');
+    await SystemNavigator.pop();
   }
 
   @override

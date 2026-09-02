@@ -46,7 +46,8 @@ with an `error` event instead of silently skipping a step.
    whatever reads them — a settings screen, a polling background task — keeps
    using them after the recording unless something puts the user's own values
    back. Snapshot on the first `onPrepare`, not on every one, or a two-demo run
-   restores demo state.
+   restores demo state. The app then closes itself — the only signal on the
+   device that the run is over; `exitWhenDone: false` keeps it open.
 2. **Keys on everything a demo taps.** `key: const ValueKey('settings_button')`
    on the `IconButton`, not on its icon. Keys are the contract between the
    config/registry and the UI.
