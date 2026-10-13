@@ -10,7 +10,7 @@
   ],
   "analysis_command_states": {
     "tools\\run_tests.bat": {
-      "test": "failed"
+      "test": "green"
     }
   }
 }
