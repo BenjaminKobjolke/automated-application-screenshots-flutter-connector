@@ -32,11 +32,14 @@ Future<int> deadPort() async {
 /// Address every socket test connects to.
 const String loopbackHost = '127.0.0.1';
 
-/// For a tool that turns up shortly after the app starts waiting.
+/// For a tool that turns up shortly after the app starts waiting. Keep the
+/// attempt timeout below 500 ms: Windows re-sends a refused loopback SYN
+/// after about 500 ms, so an attempt timing out then may still reach the server
+/// as an unused connection.
 const ConnectRetry fastRetry = ConnectRetry(
   interval: Duration(milliseconds: 20),
   timeout: Duration(seconds: 5),
-  attemptTimeout: Duration(milliseconds: 500),
+  attemptTimeout: Duration(milliseconds: 200),
 );
 
 /// Gives up almost at once, for asserting the deadline is honoured.

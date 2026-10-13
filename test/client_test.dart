@@ -50,18 +50,20 @@ void main() {
     // The tool only starts listening after the first attempts have failed.
     await Future<void>.delayed(const Duration(milliseconds: 100));
     final server = await bindLoopback(port);
-    final accepted = server.first;
+    // Keep accepting: `server.first` closes the listener after one connection,
+    // and that one can be an attempt the client had already given up on.
+    final accepting = server.listen((conn) => conn.listen((_) {},
+        onError: (Object _) => conn.destroy(), onDone: conn.destroy));
 
     final client = await pending;
     expect(client, isNotNull);
 
-    // Tear down the way the host does: something must listen to `commands`
-    // before close(), and the tool side must go first — a socket's close
-    // future only completes once its peer has closed too.
+    // The listener hangs up once the client closes, letting its close future
+    // complete without closing the tool side by hand first.
     final sub = client!.commands.listen((_) {});
-    (await accepted).destroy();
     await client.close();
     await sub.cancel();
+    await accepting.cancel();
     await server.close();
   });
 
