@@ -15,24 +15,13 @@ if %ERRORLEVEL% neq 0 (
 echo Running tests...
 echo.
 
-:: Output goes to a temp file first so the script captures flutter test's OWN
-:: exit code below. Never pipe `fvm flutter test` straight into findstr/grep
-:: for noise filtering - the pipe's exit code becomes the FILTER's exit code,
-:: not flutter test's, silently corrupting pass/fail detection either way
-:: (a real failure can read as pass, or vice versa). findstr also has a
-:: ~8191-char line-length limit and errors on long compact-reporter lines
-:: ("Line X is too long"), which trips this same bug even harder.
-set TESTLOG=%TEMP%\_flutter_tests_output.log
-fvm flutter test > "%TESTLOG%" 2>&1
+:: The runner writes straight to the console so every test shows up as its
+:: own line while the run is still going (expanded reporter = one line per
+:: test). No redirect: it hides all progress until the runner exits. No pipe
+:: into findstr/grep either: %ERRORLEVEL% would then be the FILTER's exit
+:: code, not flutter test's, so a real failure could read as a pass.
+fvm flutter test --reporter expanded
 set TESTRESULT=%ERRORLEVEL%
-
-:: To filter benign third-party log noise for display, filter the temp file
-:: with PowerShell Select-String (no line-length limit, runs in its own
-:: process so it cannot affect %TESTRESULT%) instead of findstr, e.g.:
-::   powershell -NoProfile -Command "Get-Content -LiteralPath '%TESTLOG%' | Select-String -NotMatch 'pattern1|pattern2'"
-type "%TESTLOG%"
-
-del "%TESTLOG%" >nul 2>&1
 
 if %TESTRESULT% neq 0 (
     echo.
