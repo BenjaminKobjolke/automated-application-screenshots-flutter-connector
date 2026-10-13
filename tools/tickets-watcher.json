@@ -1,8 +1,16 @@
 {
   "files": {
-    "TICKETS_WATCHER_COMMANDS.md": 1
+    "TICKETS_WATCHER_COMMANDS.md": 2
   },
   "analysis_commands": [
     "tools\\run_tests.bat"
-  ]
+  ],
+  "silent_test_scan_reported": [
+    "tools\\run_tests.bat"
+  ],
+  "analysis_command_states": {
+    "tools\\run_tests.bat": {
+      "test": "failed"
+    }
+  }
 }
