@@ -53,10 +53,11 @@ with an `error` event instead of silently skipping a step.
    config/registry and the UI.
 3. **No dialogs stealing taps.** Permission prompts, onboarding, update
    notices — gate them on demo mode or dismiss them in `onPrepare`.
-4. **Video demos need the consent tap.** Android shows the screen-recording
-   dialog before each video demo; someone taps *Start now* on the device. Not
-   in the video (recording starts after), but it delays `demo_started`. Stills
-   only? Use `"formats": ["png"]` — no recording, no prompt.
+4. **Pre-grant recording consent on development devices.** `ensure_device`
+   grants screen-recording consent before video demos, including the first run
+   on a fresh emulator. A tap is only needed when the app does not use
+   `ensure_device`. Stills-only demos (`"formats": ["png"]`) do not record
+   video and need no consent.
 5. **Background services keep running.** The recorder plugin's stop calls
    `FlutterForegroundTask.stopService()`; if your app runs its own foreground
    task, a video demo stops it. Fine for demos that do not depend on it.

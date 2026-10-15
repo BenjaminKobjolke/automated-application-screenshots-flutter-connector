@@ -45,10 +45,10 @@ dependency_overrides:
 
 (the Dart API the plugin uses is unchanged; verified in `block-screen-app`).
 Android: minSdk 23, the plugin's manifest brings its own foreground service
-and `FOREGROUND_SERVICE_MEDIA_PROJECTION` permission. Android 14+ shows the
-system consent dialog before **every** video demo — one tap on the device per
-demo, not part of the recording. Stills-only demos (`"formats": ["png"]`)
-never prompt.
+and `FOREGROUND_SERVICE_MEDIA_PROJECTION` permission. Android 14+ requires
+screen-recording consent before each video demo. `ensure_device` pre-grants it
+on development devices; see [Skipping the recording consent prompt](#skipping-the-recording-consent-prompt).
+Stills-only demos (`"formats": ["png"]`) never prompt.
 
 ## Wire it up
 
@@ -108,11 +108,14 @@ fvm dart run automated_screenshot_connector:ensure_device
 
 It reuses whatever `adb` already lists and only launches an emulator when
 nothing usable is attached, then waits for `sys.boot_completed` (up to 180 s).
-Exit code 0 means a device is ready.
+It also pre-grants screen capture on every ready device. If the app is not
+installed yet, a device-side watcher grants it after `flutter run` installs the
+app (up to 20 minutes). Exit code 0 means a device is ready.
 
 | variable | effect |
 |---|---|
 | `DEMO_EMULATOR` | AVD to launch. Empty: the first id `flutter emulators` lists. |
+| `DEMO_PACKAGE` | Package to pre-grant screen capture for. Empty: use `applicationId` from `android/app/build.gradle(.kts)` in the working directory. |
 
 Selecting *which* attached device the app then runs on is the calling app's job
 (`flutter run -d <serial>`), not this script's — it only guarantees one exists.
@@ -156,10 +159,13 @@ roomier AVD is the real fix.
 
 ### Skipping the recording consent prompt
 
-Every video demo otherwise stops on Android's *Share your screen with …?*
-dialog, and someone has to tap **Share screen**. On a development device or
-emulator you can pre-grant the capture app op once, and the recording starts
-unattended:
+`ensure_device` pre-grants screen capture on every ready development device each
+time it runs. If the app is not installed yet, it leaves a device-side watcher
+that grants consent as soon as `flutter run` installs the app, for up to 20
+minutes. Re-running `ensure_device` while a watcher is waiting may start another
+one; duplicate watchers are harmless.
+
+The manual command remains a fallback for apps that do not call `ensure_device`:
 
 ```
 adb shell appops set <your.package.id> PROJECT_MEDIA allow
@@ -167,11 +173,13 @@ adb shell appops set <your.package.id> PROJECT_MEDIA allow
 
 Check it with `adb shell appops get <your.package.id> PROJECT_MEDIA`: after a
 recording the entry reads `allow; time=…`, where `time` is when capture last
-actually used it.
+actually used it. To undo the grant, run
+`adb shell appops set <your.package.id> PROJECT_MEDIA default`.
 
-- Set it **per AVD/device, once**. It survives `adb install -r`, so a normal
-  `flutter run` reinstall keeps it; uninstalling the app or wiping the AVD
-  clears it.
+- A tap is only needed if the app is installed another way more than 20 minutes
+  after `ensure_device` ran, or if `flutter run` uninstalls the app because of a
+  signature mismatch. The grant is removed with the app; the next
+  `ensure_device` run grants it again.
 - Verified on an Android 17 (API 37) emulator. This is a debugging aid for
   machines you control — it does not change what a released app does, and real
   users always see the dialog.
