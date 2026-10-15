@@ -23,10 +23,14 @@ void main() {
       '1a2b3c4d\tunauthorized\n'
       'R58M20ABCDE\tdevice\n',
     );
-    expect(devices.map((d) => d.serial),
-        ['emulator-5554', '1a2b3c4d', 'R58M20ABCDE']);
-    expect(devices.where((d) => d.isReady).map((d) => d.serial),
-        ['R58M20ABCDE']);
+    expect(devices.map((d) => d.serial), [
+      'emulator-5554',
+      '1a2b3c4d',
+      'R58M20ABCDE',
+    ]);
+    expect(devices.where((d) => d.isReady).map((d) => d.serial), [
+      'R58M20ABCDE',
+    ]);
   });
 
   test('parseAdbDevices ignores adb daemon notices', () {
@@ -63,5 +67,123 @@ void main() {
       ),
       isEmpty,
     );
+  });
+
+  group('parseApplicationId', () {
+    test('reads Kotlin DSL and Groovy declarations', () {
+      expect(
+        parseApplicationId('applicationId = "de.xida.blockscreen"'),
+        'de.xida.blockscreen',
+      );
+      expect(
+        parseApplicationId('applicationId "com.example.app"'),
+        'com.example.app',
+      );
+      expect(
+        parseApplicationId("applicationId 'com.example.app'"),
+        'com.example.app',
+      );
+    });
+
+    test('ignores suffix-only declarations and comments', () {
+      expect(parseApplicationId('applicationIdSuffix = ".debug"'), isNull);
+      expect(
+        parseApplicationId(
+          'applicationIdSuffix = ".debug"\napplicationId = "com.example.app"',
+        ),
+        'com.example.app',
+      );
+      expect(
+        parseApplicationId(
+          '// applicationId = "old.id"\napplicationId = "new.id"',
+        ),
+        'new.id',
+      );
+    });
+
+    test('returns null when no application id is declared', () {
+      expect(parseApplicationId('namespace = "com.example"'), isNull);
+    });
+  });
+
+  group('isAndroidPackageName', () {
+    test('accepts Android package names', () {
+      expect(isAndroidPackageName('de.xida.blockscreen'), isTrue);
+      expect(isAndroidPackageName('com.example.app_1'), isTrue);
+    });
+
+    test('rejects malformed and unsafe values', () {
+      for (final value in [
+        'app',
+        '1com.x',
+        'com..x',
+        'de.xida;reboot',
+        'de.xida blockscreen',
+        '',
+      ]) {
+        expect(isAndroidPackageName(value), isFalse, reason: value);
+      }
+    });
+  });
+
+  group('isPackageInstalled', () {
+    test('finds package paths in pm output', () {
+      expect(
+        isPackageInstalled(
+          'package:/data/app/~~x/de.xida.blockscreen-1/base.apk\n',
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects empty and error output', () {
+      expect(isPackageInstalled(''), isFalse);
+      expect(isPackageInstalled('Error: package not found'), isFalse);
+    });
+  });
+
+  group('appOpsSetSucceeded', () {
+    test('requires a zero exit code and no output', () {
+      expect(appOpsSetSucceeded(0, ''), isTrue);
+      expect(appOpsSetSucceeded(0, '  \n'), isTrue);
+      expect(appOpsSetSucceeded(0, 'Error: No UID for x in user 0\n'), isFalse);
+      expect(appOpsSetSucceeded(255, ''), isFalse);
+    });
+  });
+
+  test('appOpsGrantArgs builds the capture grant arguments', () {
+    expect(appOpsGrantArgs('de.x.y'), [
+      'appops',
+      'set',
+      'de.x.y',
+      'PROJECT_MEDIA',
+      'allow',
+    ]);
+  });
+
+  group('grantWhenInstalledScript', () {
+    test('checks for installation and grants capture with bounded retries', () {
+      final script = grantWhenInstalledScript(
+        'de.x.y',
+        attempts: 1200,
+        interval: const Duration(seconds: 1),
+      );
+
+      expect(script, contains('pm path de.x.y'));
+      expect(script, contains('appops set de.x.y PROJECT_MEDIA allow'));
+      expect(script, contains('1200'));
+      expect(script, contains('sleep 1'));
+    });
+
+    test('rejects an unsafe package name', () {
+      expect(
+        () => grantWhenInstalledScript(
+          'de.x;reboot',
+          attempts: 1200,
+          interval: const Duration(seconds: 1),
+        ),
+        throwsArgumentError,
+      );
+    });
   });
 }

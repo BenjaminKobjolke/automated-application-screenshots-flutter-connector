@@ -11,6 +11,9 @@ library;
 
 import 'dart:convert';
 
+const _projectMediaOp = 'PROJECT_MEDIA';
+const _allowAppOpMode = 'allow';
+
 /// Serial of an attached device, and whether it is ready to be used.
 class AdbDevice {
   /// Creates a device entry from one `adb devices` row.
@@ -61,4 +64,54 @@ List<String> parseEmulatorIds(String stdout) {
     ids.add(id);
   }
   return ids;
+}
+
+/// Reads the first Gradle `applicationId` declaration, ignoring `//` comments.
+String? parseApplicationId(String gradleSource) {
+  final declaration = RegExp(r'''\bapplicationId\s*=?\s*["']([^"']+)["']''');
+  for (final line in const LineSplitter().convert(gradleSource)) {
+    final trimmed = line.trim();
+    if (trimmed.startsWith('//')) continue;
+    final match = declaration.firstMatch(trimmed);
+    if (match != null) return match.group(1);
+  }
+  return null;
+}
+
+/// Whether [value] is a safe Android package name for a device shell command.
+bool isAndroidPackageName(String value) =>
+    RegExp(r'^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$')
+        .hasMatch(value);
+
+/// Whether `pm path` output contains an installed package path.
+bool isPackageInstalled(String pmPathOutput) => const LineSplitter()
+    .convert(pmPathOutput)
+    .any((line) => line.trim().startsWith('package:'));
+
+/// Whether an `appops set` invocation succeeded without diagnostic output.
+bool appOpsSetSucceeded(int exitCode, String output) =>
+    exitCode == 0 && output.trim().isEmpty;
+
+/// Builds the `appops set` arguments that grant screen capture consent.
+List<String> appOpsGrantArgs(String packageName) => [
+  'appops',
+  'set',
+  packageName,
+  _projectMediaOp,
+  _allowAppOpMode,
+];
+
+/// Builds a bounded device shell loop that grants consent after installation.
+String grantWhenInstalledScript(
+  String packageName, {
+  required int attempts,
+  required Duration interval,
+}) {
+  if (!isAndroidPackageName(packageName)) {
+    throw ArgumentError.value(packageName, 'packageName');
+  }
+  return 'i=0; while [ \$i -lt $attempts ]; do '
+      'if pm path $packageName 2>/dev/null | grep -q package:; then '
+      '${appOpsGrantArgs(packageName).join(' ')}; exit; fi; '
+      'i=\$((i+1)); sleep ${interval.inSeconds}; done';
 }
