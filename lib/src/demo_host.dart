@@ -5,19 +5,14 @@ import 'package:flutter/widgets.dart';
 
 import 'app_logger.dart';
 import 'client.dart';
+import 'live_screens.dart';
+import 'live_session.dart';
 import 'protocol.dart';
 import 'registry.dart';
 import 'screen_recorder.dart';
 import 'step_executor.dart';
 import 'steps.dart';
 import 'still_capture.dart';
-
-/// Resets the app to a clean, deterministic state before a demo plays.
-///
-/// [settings] is the tool config's `app_settings`, [language] the run's UI
-/// language (null when the demo has none).
-typedef PrepareCallback = Future<void> Function(
-    Map<String, String> settings, String? language);
 
 /// Undoes what a [PrepareCallback] changed, once the tool has disconnected.
 ///
@@ -50,6 +45,7 @@ class AutomationDemoHost extends StatefulWidget {
     required this.registry,
     this.onPrepare,
     this.onRestore,
+    this.screens,
     this.host = const String.fromEnvironment(automationHostDefine),
     this.recorder = const PluginScreenRecorder(),
     this.retry = const ConnectRetry(),
@@ -68,6 +64,9 @@ class AutomationDemoHost extends StatefulWidget {
   /// Called once after the tool disconnects, to undo [onPrepare].
   final RestoreCallback? onRestore;
 
+  /// Named screens available to live commands; null means none are registered.
+  final LiveScreenRegistry? screens;
+
   /// `ip:port` of the tool; empty = demo mode off.
   final String host;
 
@@ -77,7 +76,7 @@ class AutomationDemoHost extends StatefulWidget {
   /// How long to keep waiting for the tool; see [DemoClient.connectWithRetry].
   final ConnectRetry retry;
 
-  /// Whether to close the app once the run is over and [onRestore] has run.
+  /// Whether to close the app after a demo-only run and [onRestore] has run.
   ///
   /// The app vanishing from the screen is the only signal on the device that
   /// the recording finished — a demo build left sitting on its home screen
@@ -93,6 +92,7 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
   final GlobalKey _boundaryKey = GlobalKey();
   DemoClient? _client;
   StreamSubscription<void>? _subscription;
+  var _live = false;
 
   @override
   void initState() {
@@ -104,19 +104,40 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
     final parts = widget.host.split(':');
     final port = parts.length == 2 ? int.tryParse(parts[1]) : null;
     if (port == null) {
-      AppLogger.e('$automationHostDefine must be ip:port, got "${widget.host}"');
+      AppLogger.e(
+        '$automationHostDefine must be ip:port, got "${widget.host}"',
+      );
       return;
     }
     // Retries, so the tool may be started before or after the app.
-    final client = await DemoClient.connectWithRetry(parts[0], port,
-        retry: widget.retry, isCancelled: () => !mounted);
+    final client = await DemoClient.connectWithRetry(
+      parts[0],
+      port,
+      retry: widget.retry,
+      isCancelled: () => !mounted,
+    );
     if (client == null || !mounted) return;
     _client = client;
-    // Demos run strictly one after another; asyncMap serializes them, and it
-    // holds the stream's done event back until the last demo has finished —
-    // which is what lets the restore run after the run rather than during it.
-    _subscription =
-        client.commands.asyncMap(_runDemo).listen((_) {}, onDone: _finish);
+    // Keep demo and live commands in order, and finish only after the last
+    // command has completed so restore cannot race an in-flight operation.
+    _subscription = client.commands
+        .asyncMap(_handleCommand)
+        .listen((_) {}, onDone: _finish);
+  }
+
+  Future<void> _handleCommand(ToolCommand command) async {
+    switch (command) {
+      case StartCommand():
+        await _runDemo(command);
+      case LiveCommand():
+        _live = true;
+        final session = LiveSession(
+          screens: widget.screens ?? LiveScreenRegistry(),
+          still: StillCapture(_boundaryKey),
+          onPrepare: widget.onPrepare,
+        );
+        _client?.sendLine(await session.handle(command));
+    }
   }
 
   Future<void> _runDemo(StartCommand command) async {
@@ -125,8 +146,9 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
     try {
       await widget.onPrepare?.call(command.settings, command.language);
       final steps = localizeSteps(
-          command.steps ?? widget.registry.get(command.demo).steps,
-          command.texts);
+        command.steps ?? widget.registry.get(command.demo).steps,
+        command.texts,
+      );
       if (command.video) {
         await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
         recording = await widget.recorder.start('demo_${command.demo}');
@@ -166,9 +188,13 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
     try {
       await widget.onRestore?.call();
     } on Object catch (e, stack) {
-      AppLogger.e('restoring the app state failed', error: e, stackTrace: stack);
+      AppLogger.e(
+        'restoring the app state failed',
+        error: e,
+        stackTrace: stack,
+      );
     }
-    if (!widget.exitWhenDone) return;
+    if (!widget.exitWhenDone || _live) return;
     AppLogger.i('run finished; closing the app');
     await SystemNavigator.pop();
   }
@@ -184,7 +210,8 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
   Widget build(BuildContext context) =>
       RepaintBoundary(key: _boundaryKey, child: widget.child);
 
-  Future<void> _delay(int ms) => Future<void>.delayed(Duration(milliseconds: ms));
+  Future<void> _delay(int ms) =>
+      Future<void>.delayed(Duration(milliseconds: ms));
 }
 
 /// Placeholder for a failed recorder stop inside error handling.

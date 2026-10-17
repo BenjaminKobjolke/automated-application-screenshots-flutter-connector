@@ -34,7 +34,7 @@ class ConnectRetry {
   final Duration attemptTimeout;
 }
 
-/// Socket link to the recording tool: receives `start` commands, sends events.
+/// Socket link to the recording tool: receives tool commands and sends events.
 ///
 /// Degrades to a no-op on any socket failure — the demo must never crash the
 /// app because the tool went away.
@@ -42,7 +42,7 @@ class DemoClient {
   DemoClient._(this._socket);
 
   Socket? _socket;
-  final _commands = StreamController<StartCommand>();
+  final _commands = StreamController<ToolCommand>();
 
   /// Connects to the tool at [host]:[port]; null if it cannot be reached.
   static Future<DemoClient?> connect(String host, int port) async {
@@ -88,7 +88,10 @@ class DemoClient {
 
   /// Opens the socket and wraps it, or throws if the tool is not reachable.
   static Future<DemoClient> _open(
-      String host, int port, Duration timeout) async {
+    String host,
+    int port,
+    Duration timeout,
+  ) async {
     final socket = await Socket.connect(host, port, timeout: timeout);
     socket.setOption(SocketOption.tcpNoDelay, true);
     final client = DemoClient._(socket);
@@ -97,8 +100,8 @@ class DemoClient {
     return client;
   }
 
-  /// The tool's `start` commands, one per demo run.
-  Stream<StartCommand> get commands => _commands.stream;
+  /// Commands received from the tool, in the order they were sent.
+  Stream<ToolCommand> get commands => _commands.stream;
 
   void _listen(Socket socket) {
     socket
@@ -106,18 +109,21 @@ class DemoClient {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen(
-      (line) {
-        if (line.trim().isEmpty) return;
-        try {
-          _commands.add(StartCommand.fromJson(
-              Map<String, dynamic>.from(jsonDecode(line) as Map)));
-        } on Object catch (e) {
-          AppLogger.e('ignoring malformed tool command: $line', error: e);
-        }
-      },
-      onError: (Object e) => _disable('tool connection failed', e),
-      onDone: () => _disable('tool closed the connection', null),
-    );
+          (line) {
+            if (line.trim().isEmpty) return;
+            try {
+              _commands.add(
+                ToolCommand.fromJson(
+                  Map<String, dynamic>.from(jsonDecode(line) as Map),
+                ),
+              );
+            } on Object catch (e) {
+              AppLogger.e('ignoring malformed tool command: $line', error: e);
+            }
+          },
+          onError: (Object e) => _disable('tool connection failed', e),
+          onDone: () => _disable('tool closed the connection', null),
+        );
   }
 
   /// Sends one JSON event line.
