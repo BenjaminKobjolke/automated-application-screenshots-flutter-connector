@@ -5,6 +5,8 @@
 /// re-typed per test.
 library;
 
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:automated_screenshot_connector/automated_screenshot_connector.dart';
@@ -31,6 +33,26 @@ Future<int> deadPort() async {
 
 /// Address every socket test connects to.
 const String loopbackHost = '127.0.0.1';
+
+final Expando<StreamIterator<String>> _eventLines =
+    Expando<StreamIterator<String>>('demo server event lines');
+
+/// Reads the next JSON event line from [connection] before [timeout].
+Future<Map<String, dynamic>> nextEvent(
+  Socket connection, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  final lines = _eventLines[connection] ??= StreamIterator<String>(
+    connection
+        .cast<List<int>>()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter()),
+  );
+  if (!await lines.moveNext().timeout(timeout)) {
+    throw StateError('connection closed before the next event');
+  }
+  return Map<String, dynamic>.from(jsonDecode(lines.current) as Map);
+}
 
 /// For a tool that turns up shortly after the app starts waiting. Keep the
 /// attempt timeout below 500 ms: Windows re-sends a refused loopback SYN

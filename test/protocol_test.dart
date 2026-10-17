@@ -25,7 +25,7 @@ void main() {
       'language': 'de',
       'texts': {'price': 'Preis'},
       'steps': [
-        {'type': 'tap', 'key': 'x'}
+        {'type': 'tap', 'key': 'x'},
       ],
     });
     expect(cmd.video, isTrue);
@@ -37,16 +37,128 @@ void main() {
   });
 
   test('non-start objects are rejected', () {
-    expect(() => StartCommand.fromJson({'command': 'stop', 'demo': 1}),
-        throwsA(isA<FormatException>()));
+    expect(
+      () => StartCommand.fromJson({'command': 'stop', 'demo': 1}),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('ToolCommand parses live commands and their defaults', () {
+    expect(
+      ToolCommand.fromJson({'command': 'list_screens'}),
+      isA<ListScreensCommand>(),
+    );
+
+    final navigate = ToolCommand.fromJson({
+      'command': 'navigate',
+      'screen': 'settings',
+    }) as NavigateCommand;
+    expect(navigate.screen, 'settings');
+    expect(navigate.settings, isEmpty);
+    expect(navigate.language, isNull);
+
+    final configuredNavigate = ToolCommand.fromJson({
+      'command': 'navigate',
+      'screen': 'details',
+      'settings': {'account': 42},
+      'language': 'de',
+    }) as NavigateCommand;
+    expect(configuredNavigate.settings, {'account': '42'});
+    expect(configuredNavigate.language, 'de');
+
+    final screenshot = ToolCommand.fromJson({
+      'command': 'screenshot',
+      'name': 'settings',
+    }) as ScreenshotCommand;
+    expect(screenshot.name, 'settings');
+    expect(screenshot.pixelRatio, 1.0);
+    expect(
+      (ToolCommand.fromJson({
+        'command': 'screenshot',
+        'name': 'details',
+        'pixel_ratio': 2,
+      }) as ScreenshotCommand).pixelRatio,
+      2.0,
+    );
+
+    final reset = ToolCommand.fromJson({'command': 'reset'}) as ResetCommand;
+    expect(reset.settings, isEmpty);
+    expect(reset.language, isNull);
+    final configuredReset = ToolCommand.fromJson({
+      'command': 'reset',
+      'settings': {'account': 'test'},
+      'language': 'fr',
+    }) as ResetCommand;
+    expect(configuredReset.settings, {'account': 'test'});
+    expect(configuredReset.language, 'fr');
+  });
+
+  test('navigate and screenshot require their string identifier', () {
+    expect(
+      () => ToolCommand.fromJson({'command': 'navigate'}),
+      throwsA(isA<FormatException>()),
+    );
+    expect(
+      () => ToolCommand.fromJson({'command': 'navigate', 'screen': 3}),
+      throwsA(isA<FormatException>()),
+    );
+    expect(
+      () => ToolCommand.fromJson({'command': 'screenshot'}),
+      throwsA(isA<FormatException>()),
+    );
+    expect(
+      () => ToolCommand.fromJson({'command': 'screenshot', 'name': 3}),
+      throwsA(isA<FormatException>()),
+    );
+    expect(
+      () => ToolCommand.fromJson({'command': 'unknown'}),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('ToolCommand preserves start parsing', () {
+    expect(
+      ToolCommand.fromJson({'command': 'start', 'demo': 2}),
+      isA<StartCommand>(),
+    );
   });
 
   test('events encode as the tool expects', () {
     expect(DemoEvents.demoStarted(1), {'event': 'demo_started', 'demo': 1});
-    expect(DemoEvents.screenshot('home', Uint8List.fromList([1, 2, 3])),
-        {'event': 'screenshot', 'name': 'home', 'png': base64Encode([1, 2, 3])});
-    expect(DemoEvents.videoHeader(1, 9),
-        {'event': 'video', 'demo': 1, 'size': 9});
+    expect(DemoEvents.screenshot('home', Uint8List.fromList([1, 2, 3])), {
+      'event': 'screenshot',
+      'name': 'home',
+      'png': base64Encode([1, 2, 3]),
+    });
+    expect(DemoEvents.videoHeader(1, 9), {
+      'event': 'video',
+      'demo': 1,
+      'size': 9,
+    });
     expect(DemoEvents.error('boom'), {'event': 'error', 'message': 'boom'});
+    expect(
+      DemoEvents.screens([
+        {
+          'name': 'settings',
+          'description': 'Settings page',
+          'needs_login': true,
+        },
+      ]),
+      {
+        'event': 'screens',
+        'screens': [
+          {
+            'name': 'settings',
+            'description': 'Settings page',
+            'needs_login': true,
+          },
+        ],
+      },
+    );
+    expect(DemoEvents.navigated('settings'), {
+      'event': 'navigated',
+      'screen': 'settings',
+    });
+    expect(DemoEvents.resetDone(), {'event': 'reset_done'});
   });
 }
