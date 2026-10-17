@@ -1,5 +1,8 @@
 # Writing demo scripts
 
+For persistent sessions that open screens by name, see
+[Live named screens](LIVE_SCREENS.md).
+
 A demo is a `DemoScript` built from the step types below, registered in your
 app in a `DemoRegistry`. The recording tool selects one by id in its `start`
 command — or sends the steps itself (`"steps"` in the tool config demo), in

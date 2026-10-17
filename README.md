@@ -20,8 +20,11 @@ The library itself is pure Dart; it also ships one host-side script,
 |---|---|
 | `steps.dart` | Step model (`TapStep`, `TypeTextStep`, `PauseStep`, `ScreenshotStep`, `CustomStep`), `DemoScript`, JSON codec, `localizeSteps`, `estimatedDuration` |
 | `registry.dart` | `DemoRegistry` — id → script, `customActions` for `custom` steps, `UnknownDemoError` |
-| `protocol.dart` | `StartCommand` (tool → app) and `DemoEvents` encoders (app → tool) |
-| `client.dart` | `DemoClient` — TCP link, `start` command stream, event lines + raw mp4 upload; never throws into the app. `connectWithRetry` + `ConnectRetry` keep waiting for the tool, so app and tool start in either order |
+| `protocol.dart` | Typed tool commands and `DemoEvents` encoders for demo and live sessions |
+| `client.dart` | `DemoClient` — TCP link, ordered command stream, event lines + raw mp4 upload; never throws into the app. `connectWithRetry` + `ConnectRetry` keep waiting for the tool, so app and tool start in either order |
+| `live_screens.dart` | `LiveScreenRegistry` — app-owned screen names, descriptions, login requirements and open callbacks |
+| `live_session.dart` | `LiveSession` — lists screens, navigates, captures stills and resets state |
+| `frame_settle.dart` | Waits for a rendered frame and transient callbacks before live replies |
 | `still_capture.dart` | `StillCapture` — `RepaintBoundary.toImage` → PNG bytes |
 | `screen_recorder.dart` | `ScreenRecorder` interface + `PluginScreenRecorder` (`flutter_screen_recording`) |
 | `step_executor.dart` | `StepExecutor` — taps by `ValueKey` via synthesized pointer events, types into the focused field, runs custom actions |
@@ -94,6 +97,23 @@ AutomationDemoHost(
 Demo content stays in your app; see [docs/WRITING_DEMOS.md](docs/WRITING_DEMOS.md).
 `block-screen-app` (`lib/demos/demo_registry.dart`,
 `tools/create_media/`) is the working reference.
+
+## Live mode
+
+Apps can keep a debug session connected and expose named screens for repeated
+navigation and in-app screenshots. Register each route in a
+`LiveScreenRegistry`, provide it to `AutomationDemoHost`, and use the app's
+`navigatorKey` in each screen's `open` callback. `navigate` runs `onPrepare`
+first, so the same request can restore a screen after hot reload or restart.
+The connector handles `list_screens`, `navigate`, `screenshot` and `reset` over
+the existing JSON-lines connection. The screenshot tool's `--live` driver keeps
+the app running and requests named captures. See
+[docs/LIVE_SCREENS.md](docs/LIVE_SCREENS.md) for registration, test-login
+restoration and the wire contract.
+
+Live screen capture also works with the Windows desktop target using
+`flutter run -d windows`; it captures the Flutter view in-app and does not use
+the Android screen-recording plugin. Live mode is debug-only and stills-only.
 
 ## Starting a device (`ensure_device`)
 
@@ -191,6 +211,7 @@ actually used it. To undo the grant, run
 ```
 install.bat           # fvm install + pub get + tests
 tools\run_tests.bat   # fvm flutter test
+tools\run_integration_tests.bat  # Windows live-screen integration test
 fvm flutter analyze
 ```
 
