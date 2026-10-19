@@ -8,18 +8,24 @@ LiveScreenRegistry buildLiveScreens(GlobalKey<NavigatorState> navigatorKey) {
       name: 'home',
       description: 'Home screen',
       needsLogin: false,
-      open: () async => navigatorKey.currentState!.pushAndRemoveUntil<void>(
-        MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
-        (_) => false,
-      ),
+      open: () async {
+        // A push Future completes only when its route is popped.
+        navigatorKey.currentState!.pushAndRemoveUntil<void>(
+          MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+          (_) => false,
+        );
+      },
     ),
     LiveScreen(
       name: 'details',
       description: 'Details screen',
       needsLogin: false,
-      open: () async => navigatorKey.currentState!.pushReplacement<void, void>(
-        MaterialPageRoute<void>(builder: (_) => const DetailsScreen()),
-      ),
+      open: () async {
+        // A push Future completes only when its route is popped.
+        navigatorKey.currentState!.pushReplacement<void, void>(
+          MaterialPageRoute<void>(builder: (_) => const DetailsScreen()),
+        );
+      },
     ),
   ]);
 }

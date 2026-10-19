@@ -21,6 +21,9 @@ class LiveScreen {
   final bool needsLogin;
 
   /// Opens this screen using the app's own navigation mechanism.
+  ///
+  /// Do not return a `Navigator.push*` future: it completes only when the
+  /// pushed route is popped, so the `navigate` command would never reply.
   final ScreenOpen open;
 
   /// Encodes the screen metadata with the live protocol's field names.

@@ -11,7 +11,9 @@ Keep navigation in the app, where its `NavigatorState` and routes are known.
 Screen names should be unique, lowercase `snake_case` identifiers. A screen's
 `open` callback should finish after its data is ready to display. The connector
 then waits for the current frame and transient animations to settle before it
-replies to `navigate`.
+replies to `navigate`. Never return a `Navigator.push*` Future from `open` (for
+example, don't use `async =>` with a push): it completes only when the route is
+popped, so `navigate` would never reply.
 
 ```dart
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -23,18 +25,22 @@ LiveScreenRegistry buildScreens(GlobalKey<NavigatorState> navigatorKey) =>
       name: 'home',
       description: 'Home screen',
       needsLogin: false,
-      open: () async => navigatorKey.currentState!.pushAndRemoveUntil<void>(
-        MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
-        (_) => false,
-      ),
+      open: () async {
+        navigatorKey.currentState!.pushAndRemoveUntil<void>(
+          MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+          (_) => false,
+        );
+      },
     ),
     LiveScreen(
       name: 'account_settings',
       description: 'Account settings',
       needsLogin: true,
-      open: () async => navigatorKey.currentState!.pushReplacement<void, void>(
-        MaterialPageRoute<void>(builder: (_) => const AccountSettingsScreen()),
-      ),
+      open: () async {
+        navigatorKey.currentState!.pushReplacement<void, void>(
+          MaterialPageRoute<void>(builder: (_) => const AccountSettingsScreen()),
+        );
+      },
     ),
   ]);
 
