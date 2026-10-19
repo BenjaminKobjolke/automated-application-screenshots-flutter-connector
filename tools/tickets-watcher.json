@@ -10,6 +10,9 @@
   "analysis_command_states": {
     "tools\\run_tests.bat": {
       "test": "green"
+    },
+    "tools\\run_integration_tests.bat": {
+      "test": "green"
     }
   },
   "command_check_scripts": [
