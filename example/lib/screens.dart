@@ -1,6 +1,8 @@
 import 'package:automated_screenshot_connector/automated_screenshot_connector.dart';
 import 'package:flutter/material.dart';
 
+final GlobalKey _bottomSectionKey = GlobalKey();
+
 /// Builds the example's named screens using the app's navigator key.
 LiveScreenRegistry buildLiveScreens(GlobalKey<NavigatorState> navigatorKey) {
   return LiveScreenRegistry()..add([
@@ -24,6 +26,17 @@ LiveScreenRegistry buildLiveScreens(GlobalKey<NavigatorState> navigatorKey) {
         // A push Future completes only when its route is popped.
         navigatorKey.currentState!.pushReplacement<void, void>(
           MaterialPageRoute<void>(builder: (_) => const DetailsScreen()),
+        );
+      },
+    ),
+    LiveScreen(
+      name: 'long',
+      description: 'Long scrollable screen',
+      needsLogin: false,
+      sections: {'bottom': _bottomSectionKey},
+      open: () async {
+        navigatorKey.currentState!.pushReplacement<void, void>(
+          MaterialPageRoute<void>(builder: (_) => const LongScreen()),
         );
       },
     ),
@@ -58,5 +71,24 @@ class DetailsScreen extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Details')),
     body: const Center(child: Text('Details screen')),
+  );
+}
+
+/// A tall example route with a section registered for scroll navigation.
+class LongScreen extends StatelessWidget {
+  /// Creates the long route.
+  const LongScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Long screen')),
+    body: SingleChildScrollView(
+      child: Column(
+        children: [
+          const SizedBox(height: 1600),
+          Text('Bottom section', key: _bottomSectionKey),
+        ],
+      ),
+    ),
   );
 }

@@ -54,6 +54,12 @@ void main() {
             'description': 'Details screen',
             'needs_login': false,
           },
+          {
+            'name': 'long',
+            'description': 'Long scrollable screen',
+            'needs_login': false,
+            'sections': ['bottom'],
+          },
         ],
       });
       expect(await send({'command': 'navigate', 'screen': 'details'}), {
@@ -74,6 +80,44 @@ void main() {
       expect(frame.image.height, greaterThan(0));
       frame.image.dispose();
       image.dispose();
+
+      expect(
+        await send({
+          'command': 'navigate',
+          'screen': 'long',
+          'theme': 'dark',
+          'section': 'bottom',
+        }),
+        {'event': 'navigated', 'screen': 'long'},
+      );
+      expect(find.text('Bottom section'), findsOneWidget);
+      expect(
+        Theme.of(tester.element(find.byType(Scaffold).last)).brightness,
+        Brightness.dark,
+      );
+
+      final viewportCapture = await send({
+        'command': 'screenshot',
+        'name': 'long_viewport',
+      });
+      final fullCapture = await send({
+        'command': 'screenshot',
+        'name': 'long_full',
+        'full': true,
+      });
+      final viewportCodec = await ui.instantiateImageCodec(
+        base64Decode(viewportCapture['png'] as String),
+      );
+      final fullCodec = await ui.instantiateImageCodec(
+        base64Decode(fullCapture['png'] as String),
+      );
+      final viewportFrame = await viewportCodec.getNextFrame();
+      final fullFrame = await fullCodec.getNextFrame();
+      expect(fullFrame.image.height, greaterThan(viewportFrame.image.height));
+      viewportFrame.image.dispose();
+      fullFrame.image.dispose();
+      viewportCodec.dispose();
+      fullCodec.dispose();
 
       expect(await send({'command': 'navigate', 'screen': 'home'}), {
         'event': 'navigated',
