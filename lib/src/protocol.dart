@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+
 import 'steps.dart';
 
 /// Names used by the JSON-lines command and event protocol.
@@ -138,6 +140,8 @@ final class NavigateCommand extends LiveCommand {
     required this.screen,
     this.settings = const {},
     this.language,
+    this.theme,
+    this.section,
   });
 
   /// Parses a navigation command.
@@ -150,6 +154,8 @@ final class NavigateCommand extends LiveCommand {
       screen: screen,
       settings: _stringMap(json['settings']),
       language: json['language'] as String?,
+      theme: _parseTheme(json['theme']),
+      section: json['section'] as String?,
     );
   }
 
@@ -161,12 +167,22 @@ final class NavigateCommand extends LiveCommand {
 
   /// Optional UI language passed to the prepare callback.
   final String? language;
+
+  /// Optional app theme to apply before opening the screen.
+  final Brightness? theme;
+
+  /// Optional registered section to scroll into view after opening the screen.
+  final String? section;
 }
 
 /// Captures a still of the screen currently displayed by the app.
 final class ScreenshotCommand extends LiveCommand {
   /// Creates a screenshot command.
-  const ScreenshotCommand({required this.name, this.pixelRatio = 1.0});
+  const ScreenshotCommand({
+    required this.name,
+    this.pixelRatio = 1.0,
+    this.full = false,
+  });
 
   /// Parses a screenshot command.
   factory ScreenshotCommand.fromJson(Map<String, dynamic> json) {
@@ -177,6 +193,7 @@ final class ScreenshotCommand extends LiveCommand {
     return ScreenshotCommand(
       name: name,
       pixelRatio: (json['pixel_ratio'] as num? ?? 1).toDouble(),
+      full: json['full'] == true,
     );
   }
 
@@ -185,6 +202,9 @@ final class ScreenshotCommand extends LiveCommand {
 
   /// Pixel ratio for the captured still.
   final double pixelRatio;
+
+  /// Whether to capture the full scrollable content.
+  final bool full;
 }
 
 /// Restores the app to its initial state.
@@ -208,6 +228,13 @@ final class ResetCommand extends LiveCommand {
 Map<String, String> _stringMap(Object? raw) => raw is Map
     ? raw.map((k, v) => MapEntry(k.toString(), v.toString()))
     : const {};
+
+Brightness? _parseTheme(Object? raw) {
+  if (raw == null) return null;
+  if (raw == 'dark') return Brightness.dark;
+  if (raw == 'light') return Brightness.light;
+  throw FormatException('theme must be "dark" or "light", got $raw');
+}
 
 /// Encoders for the events the app reports back to the tool.
 class DemoEvents {

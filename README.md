@@ -24,6 +24,7 @@ The library itself is pure Dart; it also ships one host-side script,
 | `client.dart` | `DemoClient` — TCP link, ordered command stream, event lines + raw mp4 upload; never throws into the app. `connectWithRetry` + `ConnectRetry` keep waiting for the tool, so app and tool start in either order |
 | `live_screens.dart` | `LiveScreenRegistry` — app-owned screen names, descriptions, login requirements and open callbacks |
 | `live_session.dart` | `LiveSession` — lists screens, navigates, captures stills and resets state |
+| `full_length_capture.dart` | `LiveCapture` — captures the viewport or expands a vertical scrollable for one tall image |
 | `frame_settle.dart` | Waits for a rendered frame and transient callbacks before live replies |
 | `still_capture.dart` | `StillCapture` — `RepaintBoundary.toImage` → PNG bytes |
 | `screen_recorder.dart` | `ScreenRecorder` interface + `PluginScreenRecorder` (`flutter_screen_recording`) |
@@ -109,7 +110,9 @@ The connector handles `list_screens`, `navigate`, `screenshot` and `reset` over
 the existing JSON-lines connection. The screenshot tool's `--live` driver keeps
 the app running and requests named captures. See
 [docs/LIVE_SCREENS.md](docs/LIVE_SCREENS.md) for registration, test-login
-restoration and the wire contract.
+restoration and the wire contract. Apps can supply an `onSetTheme` hook,
+register section `GlobalKey`s for scroll-to-section navigation, and request a
+full-length capture of vertical scrollable content.
 
 Live screen capture also works with the Windows desktop target using
 `flutter run -d windows`; it captures the Flutter view in-app and does not use

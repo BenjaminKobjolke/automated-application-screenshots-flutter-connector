@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import 'frame_settle.dart';
+import 'full_length_capture.dart';
 import 'live_screens.dart';
 import 'protocol.dart';
-import 'still_capture.dart';
 
 /// Prepares app state for a live screen, using the same inputs as a demo.
 typedef PrepareCallback = Future<void> Function(
@@ -11,20 +12,26 @@ typedef PrepareCallback = Future<void> Function(
   String? language,
 );
 
+/// Applies an in-memory app theme before a live screen is opened.
+typedef ThemeCallback = Future<void> Function(Brightness brightness);
+
 /// Executes live screen commands and returns one protocol event per command.
 class LiveSession {
   /// Creates a session with the app's registered screens and capture boundary.
   const LiveSession({
     required LiveScreenRegistry screens,
-    required StillCapture still,
+    required LiveCapture capture,
     PrepareCallback? onPrepare,
+    ThemeCallback? onSetTheme,
   }) : _screens = screens,
-       _still = still,
-       _onPrepare = onPrepare;
+       _capture = capture,
+       _onPrepare = onPrepare,
+       _onSetTheme = onSetTheme;
 
   final LiveScreenRegistry _screens;
-  final StillCapture _still;
+  final LiveCapture _capture;
   final PrepareCallback? _onPrepare;
+  final ThemeCallback? _onSetTheme;
 
   /// Handles [command], converting failures to the protocol's error event.
   Future<Map<String, Object>> handle(LiveCommand command) async {
@@ -49,15 +56,35 @@ class LiveSession {
   }
 
   Future<Map<String, Object>> _navigate(NavigateCommand command) async {
+    if (command.theme != null && _onSetTheme == null) {
+      throw StateError(
+        'theme switching is not supported: the app registered no onSetTheme hook',
+      );
+    }
+    final screen = _screens.get(command.screen);
+    final sectionKey = command.section == null
+        ? null
+        : screen.section(command.section!);
     await _onPrepare?.call(command.settings, command.language);
-    await _screens.get(command.screen).open();
+    if (command.theme case final theme?) await _onSetTheme!(theme);
+    await screen.open();
     await waitForSettledFrame();
+    if (sectionKey != null) {
+      final context = sectionKey.currentContext;
+      if (context == null) {
+        throw StateError(
+          'section "${command.section}" of screen "${command.screen}" is not built',
+        );
+      }
+      await Scrollable.ensureVisible(context, alignment: 0);
+      await waitForSettledFrame();
+    }
     return DemoEvents.navigated(command.screen);
   }
 
   Future<Map<String, Object>> _screenshot(ScreenshotCommand command) async {
     await waitForSettledFrame();
-    final png = await _still.capture(command.pixelRatio);
+    final png = await _capture.capture(command.pixelRatio, full: command.full);
     return DemoEvents.screenshot(command.name, png);
   }
 

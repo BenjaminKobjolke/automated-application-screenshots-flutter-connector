@@ -8,6 +8,7 @@ export 'src/app_logger.dart';
 export 'src/client.dart';
 export 'src/demo_host.dart';
 export 'src/frame_settle.dart';
+export 'src/full_length_capture.dart';
 export 'src/live_screens.dart';
 export 'src/live_session.dart';
 export 'src/protocol.dart';

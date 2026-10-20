@@ -1,4 +1,5 @@
 import 'package:automated_screenshot_connector/src/live_screens.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -32,11 +33,48 @@ void main() {
       'needs_login': true,
     });
   });
+
+  test('sections are included in JSON only when registered', () {
+    expect(_screen('home').toJson().containsKey('sections'), isFalse);
+    expect(
+      _screen('home', sections: {'summary': GlobalKey()}).toJson()['sections'],
+      ['summary'],
+    );
+  });
+
+  test('unknown section error lists available keys or none', () {
+    final screen = _screen('home', sections: {'summary': GlobalKey()});
+    expect(
+      () => screen.section('missing'),
+      throwsA(
+        isA<UnknownSectionError>().having(
+          (error) => error.message,
+          'message',
+          contains('available: summary'),
+        ),
+      ),
+    );
+    expect(
+      () => _screen('empty').section('missing'),
+      throwsA(
+        isA<UnknownSectionError>().having(
+          (error) => error.message,
+          'message',
+          contains('available: none'),
+        ),
+      ),
+    );
+  });
 }
 
-LiveScreen _screen(String name, {bool needsLogin = false}) => LiveScreen(
+LiveScreen _screen(
+  String name, {
+  bool needsLogin = false,
+  Map<String, GlobalKey> sections = const {},
+}) => LiveScreen(
   name: name,
   description: 'Settings screen',
   needsLogin: needsLogin,
+  sections: sections,
   open: () async {},
 );

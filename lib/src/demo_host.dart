@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'app_logger.dart';
 import 'client.dart';
+import 'full_length_capture.dart';
 import 'live_screens.dart';
 import 'live_session.dart';
 import 'protocol.dart';
@@ -45,6 +47,7 @@ class AutomationDemoHost extends StatefulWidget {
     required this.registry,
     this.onPrepare,
     this.onRestore,
+    this.onSetTheme,
     this.screens,
     this.host = const String.fromEnvironment(automationHostDefine),
     this.recorder = const PluginScreenRecorder(),
@@ -63,6 +66,9 @@ class AutomationDemoHost extends StatefulWidget {
 
   /// Called once after the tool disconnects, to undo [onPrepare].
   final RestoreCallback? onRestore;
+
+  /// Applies an in-memory theme when a live navigation requests one.
+  final ThemeCallback? onSetTheme;
 
   /// Named screens available to live commands; null means none are registered.
   final LiveScreenRegistry? screens;
@@ -90,6 +96,7 @@ class AutomationDemoHost extends StatefulWidget {
 
 class _AutomationDemoHostState extends State<AutomationDemoHost> {
   final GlobalKey _boundaryKey = GlobalKey();
+  final ValueNotifier<double?> _extraHeight = ValueNotifier(null);
   DemoClient? _client;
   StreamSubscription<void>? _subscription;
   var _live = false;
@@ -133,8 +140,9 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
         _live = true;
         final session = LiveSession(
           screens: widget.screens ?? LiveScreenRegistry(),
-          still: StillCapture(_boundaryKey),
+          capture: LiveCapture(StillCapture(_boundaryKey), _extraHeight),
           onPrepare: widget.onPrepare,
+          onSetTheme: widget.onSetTheme,
         );
         _client?.sendLine(await session.handle(command));
     }
@@ -203,12 +211,23 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
   void dispose() {
     _subscription?.cancel();
     _client?.close();
+    _extraHeight.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) =>
-      RepaintBoundary(key: _boundaryKey, child: widget.child);
+  Widget build(BuildContext context) => ValueListenableBuilder<double?>(
+    valueListenable: _extraHeight,
+    child: widget.child,
+    builder: (context, extra, child) => LayoutBuilder(
+      builder: (context, constraints) => OverflowBox(
+        alignment: Alignment.topCenter,
+        minHeight: extra == null ? null : constraints.maxHeight + extra,
+        maxHeight: extra == null ? null : constraints.maxHeight + extra,
+        child: RepaintBoundary(key: _boundaryKey, child: child),
+      ),
+    ),
+  );
 
   Future<void> _delay(int ms) =>
       Future<void>.delayed(Duration(milliseconds: ms));

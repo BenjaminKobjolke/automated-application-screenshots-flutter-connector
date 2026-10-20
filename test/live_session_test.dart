@@ -9,23 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/demo_server.dart';
 import 'demo_host_test.dart' show capturePlatformCalls, pumpUntil;
 
-Future<Map<String, dynamic>> sendAndRead(
-  WidgetTester tester,
-  Socket connection,
-  Map<String, Object?> command,
-) async {
-  connection.write('${jsonEncode(command)}\n');
-  await connection.flush();
-  final pending = nextEvent(connection);
-  var complete = false;
-  pending.whenComplete(() => complete = true);
-  while (!complete) {
-    await tester.pump(const Duration(milliseconds: 16));
-    await Future<void>.delayed(const Duration(milliseconds: 16));
-  }
-  return pending;
-}
-
 void main() {
   silenceLogger();
 

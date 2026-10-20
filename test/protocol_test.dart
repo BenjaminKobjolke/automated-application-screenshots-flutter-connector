@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:automated_screenshot_connector/automated_screenshot_connector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -56,6 +57,8 @@ void main() {
     expect(navigate.screen, 'settings');
     expect(navigate.settings, isEmpty);
     expect(navigate.language, isNull);
+    expect(navigate.theme, isNull);
+    expect(navigate.section, isNull);
 
     final configuredNavigate = ToolCommand.fromJson({
       'command': 'navigate',
@@ -66,12 +69,46 @@ void main() {
     expect(configuredNavigate.settings, {'account': '42'});
     expect(configuredNavigate.language, 'de');
 
+    final themedNavigate = ToolCommand.fromJson({
+      'command': 'navigate',
+      'screen': 'details',
+      'theme': 'dark',
+      'section': 'summary',
+    }) as NavigateCommand;
+    expect(themedNavigate.theme, Brightness.dark);
+    expect(themedNavigate.section, 'summary');
+    expect(
+      (ToolCommand.fromJson({
+        'command': 'navigate',
+        'screen': 'details',
+        'theme': 'light',
+      }) as NavigateCommand).theme,
+      Brightness.light,
+    );
+    expect(
+      () => ToolCommand.fromJson({
+        'command': 'navigate',
+        'screen': 'details',
+        'theme': 'blue',
+      }),
+      throwsA(isA<FormatException>()),
+    );
+
     final screenshot = ToolCommand.fromJson({
       'command': 'screenshot',
       'name': 'settings',
     }) as ScreenshotCommand;
     expect(screenshot.name, 'settings');
     expect(screenshot.pixelRatio, 1.0);
+    expect(screenshot.full, isFalse);
+    expect(
+      (ToolCommand.fromJson({
+        'command': 'screenshot',
+        'name': 'details',
+        'full': true,
+      }) as ScreenshotCommand).full,
+      isTrue,
+    );
     expect(
       (ToolCommand.fromJson({
         'command': 'screenshot',

@@ -17,6 +17,7 @@ popped, so `navigate` would never reply.
 
 ```dart
 final navigatorKey = GlobalKey<NavigatorState>();
+final bottomKey = GlobalKey();
 
 LiveScreenRegistry buildScreens(GlobalKey<NavigatorState> navigatorKey) =>
     LiveScreenRegistry()
@@ -42,12 +43,21 @@ LiveScreenRegistry buildScreens(GlobalKey<NavigatorState> navigatorKey) =>
         );
       },
     ),
+    LiveScreen(
+      name: 'long_form',
+      description: 'Long form',
+      needsLogin: false,
+      sections: {'additional_information': bottomKey},
+      open: () async => openLongForm(),
+    ),
   ]);
 
 AutomationDemoHost(
   registry: buildDemoRegistry(navigatorKey),
   screens: demoModeEnabled ? buildScreens(navigatorKey) : null,
   onPrepare: prepareDemoState,
+  onSetTheme: (brightness) async => themeMode.value =
+      brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
   onRestore: restoreUserState,
   child: MaterialApp(
     navigatorKey: navigatorKey,
@@ -72,7 +82,8 @@ connection. Commands are handled in order, with one reply per command:
 | --- | --- |
 | `{"command":"list_screens"}` | `{"event":"screens","screens":[{"name":"account_settings","description":"Account settings","needs_login":true}]}` |
 | `{"command":"navigate","screen":"account_settings","settings":{"test_token":"..."},"language":"de"}` | `{"event":"navigated","screen":"account_settings"}` |
-| `{"command":"screenshot","name":"account_settings","pixel_ratio":1.0}` | `{"event":"screenshot","name":"account_settings","png":"<base64 PNG>"}` |
+| `{"command":"navigate","screen":"long_form","theme":"dark","section":"additional_information"}` | `{"event":"navigated","screen":"long_form"}` |
+| `{"command":"screenshot","name":"account_settings","pixel_ratio":1.0,"full":true}` | `{"event":"screenshot","name":"account_settings","png":"<base64 PNG>"}` |
 | `{"command":"reset","settings":{},"language":null}` | `{"event":"reset_done"}` |
 
 Failures return the existing `{"event":"error","message":"..."}` event;
@@ -80,6 +91,30 @@ the connection remains usable. Screenshot captures the current view and does
 not navigate. `pixel_ratio` defaults to `1.0`. `navigate` runs `onPrepare`
 before opening the named screen, so the same command restores a screen after a
 reload or restart. `reset` runs `onPrepare` without opening another screen.
+
+`navigate` accepts optional `theme` (`dark` or `light`) and `section` fields.
+Register the app-owned hook as `AutomationDemoHost.onSetTheme`; the connector
+calls it after `onPrepare` and before opening the screen. Without a hook, a
+requested theme returns `theme switching is not supported: the app registered
+no onSetTheme hook`. Apps should apply the theme in memory and restore it in
+`onRestore` when needed.
+
+Register section keys on `LiveScreen.sections`, mapping stable section names to
+`GlobalKey`s attached to the corresponding widgets. `list_screens` includes a
+screen's `sections` array only when it has registered sections. A requested
+unknown key returns an error listing the available keys. The target widget must
+already be built when navigation finishes; avoid targets far below the fold in
+lazy builders. The connector uses `Scrollable.ensureVisible` to bring the
+section to the top of its scrollable.
+
+Set `full: true` on `screenshot` to render the current route's main vertical
+scrollable as one tall image. The connector expands the app layout temporarily,
+captures it, then restores the viewport size. Non-scrollable screens return a
+normal still. Full images are capped at 16384 physical pixels tall; layouts
+that size themselves directly from `MediaQuery` may not expand.
+
+Malformed commands return `{"event":"error","message":"malformed tool command: ..."}`
+and leave the connection available for the next command.
 
 ## Test login and restore
 
@@ -110,6 +145,9 @@ reconnects and sends `navigate` again for the current screen.
 
 - Add the connector package and a `GlobalKey<NavigatorState>`.
 - Register stable screen names with descriptions and login requirements.
+- Add an `onSetTheme` hook if live captures should switch the app theme.
+- Register section `GlobalKey`s for widgets that can be scrolled into view.
+- Use `full: true` for one-image captures of long vertical screens.
 - Make `onPrepare` deterministic and `onRestore` restore persisted user state.
 - Keep the registry and live-only UI out of production mode; do not commit test
   credentials.

@@ -11,6 +11,7 @@ import 'dart:io';
 
 import 'package:automated_screenshot_connector/automated_screenshot_connector.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart';
 
 /// Silences connector logging for every test in the calling `main()`.
 void silenceLogger() => setUp(() => AppLogger.enabled = false);
@@ -52,6 +53,24 @@ Future<Map<String, dynamic>> nextEvent(
     throw StateError('connection closed before the next event');
   }
   return Map<String, dynamic>.from(jsonDecode(lines.current) as Map);
+}
+
+/// Sends a live command and pumps frames until its event arrives.
+Future<Map<String, dynamic>> sendAndRead(
+  WidgetTester tester,
+  Socket connection,
+  Map<String, Object?> command,
+) async {
+  connection.write('${jsonEncode(command)}\n');
+  await connection.flush();
+  final pending = nextEvent(connection);
+  var complete = false;
+  pending.whenComplete(() => complete = true);
+  while (!complete) {
+    await tester.pump(const Duration(milliseconds: 16));
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+  }
+  return pending;
 }
 
 /// For a tool that turns up shortly after the app starts waiting. Keep the
