@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -36,12 +37,43 @@ void main() {
       await server.close();
 
       final text = utf8.decode(received, allowMalformed: true);
-      final newline = text.indexOf('\n');
-      expect(jsonDecode(text.substring(0, newline)), {
-        'event': 'demo_started',
-        'demo': 3,
+      final lines = text.split('\n');
+      expect(jsonDecode(lines[0]), {
+        'event': 'error',
+        'message': startsWith('malformed tool command'),
       });
+      expect(jsonDecode(lines[1]), {'event': 'demo_started', 'demo': 3});
       expect(received.sublist(received.length - 3), [0, 255, 7]);
+    },
+  );
+
+  test(
+    'malformed command replies with error and the next command works',
+    () async {
+      final server = await bindLoopback();
+      final accepted = server.first;
+      final client = (await DemoClient.connect(loopbackHost, server.port))!;
+      final conn = await accepted;
+      final replies = StreamIterator(
+        conn
+            .cast<List<int>>()
+            .transform(utf8.decoder)
+            .transform(const LineSplitter()),
+      );
+
+      conn.write('{"command":"navigate"}\n{"command":"list_screens"}\n');
+      await conn.flush();
+      final command = await client.commands.first;
+      expect(command, isA<ListScreensCommand>());
+      expect(await replies.moveNext(), isTrue);
+      expect(jsonDecode(replies.current), {
+        'event': 'error',
+        'message': startsWith('malformed tool command'),
+      });
+
+      await replies.cancel();
+      await client.close();
+      await server.close();
     },
   );
 

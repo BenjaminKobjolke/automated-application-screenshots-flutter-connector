@@ -119,6 +119,7 @@ class DemoClient {
               );
             } on Object catch (e) {
               AppLogger.e('ignoring malformed tool command: $line', error: e);
+              sendLine(DemoEvents.error('malformed tool command: $e'));
             }
           },
           onError: (Object e) => _disable('tool connection failed', e),
