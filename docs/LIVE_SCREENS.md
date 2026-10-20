@@ -82,6 +82,7 @@ connection. Commands are handled in order, with one reply per command:
 | --- | --- |
 | `{"command":"list_screens"}` | `{"event":"screens","screens":[{"name":"account_settings","description":"Account settings","needs_login":true}]}` |
 | `{"command":"navigate","screen":"account_settings","settings":{"test_token":"..."},"language":"de"}` | `{"event":"navigated","screen":"account_settings"}` |
+| `{"command":"set_theme","theme":"dark"}` | `{"event":"theme_set","theme":"dark"}` |
 | `{"command":"navigate","screen":"long_form","theme":"dark","section":"additional_information"}` | `{"event":"navigated","screen":"long_form"}` |
 | `{"command":"screenshot","name":"account_settings","pixel_ratio":1.0,"full":true}` | `{"event":"screenshot","name":"account_settings","png":"<base64 PNG>"}` |
 | `{"command":"reset","settings":{},"language":null}` | `{"event":"reset_done"}` |
@@ -92,12 +93,13 @@ not navigate. `pixel_ratio` defaults to `1.0`. `navigate` runs `onPrepare`
 before opening the named screen, so the same command restores a screen after a
 reload or restart. `reset` runs `onPrepare` without opening another screen.
 
-`navigate` accepts optional `theme` (`dark` or `light`) and `section` fields.
-Register the app-owned hook as `AutomationDemoHost.onSetTheme`; the connector
-calls it after `onPrepare` and before opening the screen. Without a hook, a
-requested theme returns `theme switching is not supported: the app registered
-no onSetTheme hook`. Apps should apply the theme in memory and restore it in
-`onRestore` when needed.
+`set_theme` accepts a `theme` (`dark` or `light`), calls the app-owned
+`AutomationDemoHost.onSetTheme` hook and replies with `theme_set` after the
+updated frame settles. Without a hook, it returns
+`theme switching is not supported: the app registered no onSetTheme hook`.
+The optional `theme` field on `navigate` remains supported for older tools; the
+connector calls its hook after `onPrepare` and before opening the screen. Apps
+should apply the theme in memory and restore it in `onRestore` when needed.
 
 Register section keys on `LiveScreen.sections`, mapping stable section names to
 `GlobalKey`s attached to the corresponding widgets. `list_screens` includes a

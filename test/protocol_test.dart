@@ -130,6 +130,31 @@ void main() {
     expect(configuredReset.language, 'fr');
   });
 
+  test('ToolCommand parses set_theme and requires a supported theme', () {
+    expect(
+      (ToolCommand.fromJson({
+        'command': 'set_theme',
+        'theme': 'dark',
+      }) as SetThemeCommand).theme,
+      Brightness.dark,
+    );
+    expect(
+      (ToolCommand.fromJson({
+        'command': 'set_theme',
+        'theme': 'light',
+      }) as SetThemeCommand).theme,
+      Brightness.light,
+    );
+    expect(
+      () => ToolCommand.fromJson({'command': 'set_theme', 'theme': 'blue'}),
+      throwsA(isA<FormatException>()),
+    );
+    expect(
+      () => ToolCommand.fromJson({'command': 'set_theme'}),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
   test('navigate and screenshot require their string identifier', () {
     expect(
       () => ToolCommand.fromJson({'command': 'navigate'}),
@@ -195,6 +220,10 @@ void main() {
     expect(DemoEvents.navigated('settings'), {
       'event': 'navigated',
       'screen': 'settings',
+    });
+    expect(DemoEvents.themeSet(Brightness.dark), {
+      'event': 'theme_set',
+      'theme': 'dark',
     });
     expect(DemoEvents.resetDone(), {'event': 'reset_done'});
   });

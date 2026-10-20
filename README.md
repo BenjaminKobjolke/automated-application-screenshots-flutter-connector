@@ -106,12 +106,12 @@ navigation and in-app screenshots. Register each route in a
 `LiveScreenRegistry`, provide it to `AutomationDemoHost`, and use the app's
 `navigatorKey` in each screen's `open` callback. `navigate` runs `onPrepare`
 first, so the same request can restore a screen after hot reload or restart.
-The connector handles `list_screens`, `navigate`, `screenshot` and `reset` over
-the existing JSON-lines connection. The screenshot tool's `--live` driver keeps
+The connector handles `list_screens`, `set_theme`, `navigate`, `screenshot` and
+`reset` over the existing JSON-lines connection. The screenshot tool's `--live` driver keeps
 the app running and requests named captures. See
 [docs/LIVE_SCREENS.md](docs/LIVE_SCREENS.md) for registration, test-login
-restoration and the wire contract. Apps can supply an `onSetTheme` hook,
-register section `GlobalKey`s for scroll-to-section navigation, and request a
+restoration and the wire contract. Apps can supply an `onSetTheme` hook for the
+`set_theme` command, register section `GlobalKey`s for scroll-to-section navigation, and request a
 full-length capture of vertical scrollable content.
 
 Live screen capture also works with the Windows desktop target using

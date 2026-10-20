@@ -46,6 +46,7 @@ class LiveSession {
         ListScreensCommand() => DemoEvents.screens([
           for (final screen in _screens.all) screen.toJson(),
         ]),
+        SetThemeCommand() => await _setTheme(command),
         NavigateCommand() => await _navigate(command),
         ScreenshotCommand() => await _screenshot(command),
         ResetCommand() => await _reset(command),
@@ -56,17 +57,13 @@ class LiveSession {
   }
 
   Future<Map<String, Object>> _navigate(NavigateCommand command) async {
-    if (command.theme != null && _onSetTheme == null) {
-      throw StateError(
-        'theme switching is not supported: the app registered no onSetTheme hook',
-      );
-    }
+    final themeHook = command.theme == null ? null : _themeHook;
     final screen = _screens.get(command.screen);
     final sectionKey = command.section == null
         ? null
         : screen.section(command.section!);
     await _onPrepare?.call(command.settings, command.language);
-    if (command.theme case final theme?) await _onSetTheme!(theme);
+    if (command.theme case final theme?) await themeHook!(theme);
     await screen.open();
     await waitForSettledFrame();
     if (sectionKey != null) {
@@ -80,6 +77,18 @@ class LiveSession {
       await waitForSettledFrame();
     }
     return DemoEvents.navigated(command.screen);
+  }
+
+  ThemeCallback get _themeHook =>
+      _onSetTheme ??
+      (throw StateError(
+        'theme switching is not supported: the app registered no onSetTheme hook',
+      ));
+
+  Future<Map<String, Object>> _setTheme(SetThemeCommand command) async {
+    await _themeHook(command.theme);
+    await waitForSettledFrame();
+    return DemoEvents.themeSet(command.theme);
   }
 
   Future<Map<String, Object>> _screenshot(ScreenshotCommand command) async {

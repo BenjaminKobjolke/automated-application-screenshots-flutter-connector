@@ -1,9 +1,8 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 
 import 'steps.dart';
+
+export 'protocol_events.dart';
 
 /// Names used by the JSON-lines command and event protocol.
 abstract final class ProtocolNames {
@@ -16,6 +15,9 @@ abstract final class ProtocolNames {
   /// The command that opens a registered screen.
   static const String navigate = 'navigate';
 
+  /// The command that changes the app's theme.
+  static const String setTheme = 'set_theme';
+
   /// The command that captures the current screen.
   static const String screenshot = 'screenshot';
 
@@ -27,6 +29,9 @@ abstract final class ProtocolNames {
 
   /// The event confirming a screen navigation.
   static const String navigated = 'navigated';
+
+  /// The event confirming the app's theme was changed.
+  static const String themeSet = 'theme_set';
 
   /// The event confirming a reset.
   static const String resetDone = 'reset_done';
@@ -55,6 +60,7 @@ sealed class ToolCommand {
       ProtocolNames.start => StartCommand.fromJson(json),
       ProtocolNames.listScreens => const ListScreensCommand(),
       ProtocolNames.navigate => NavigateCommand.fromJson(json),
+      ProtocolNames.setTheme => SetThemeCommand.fromJson(json),
       ProtocolNames.screenshot => ScreenshotCommand.fromJson(json),
       ProtocolNames.reset => ResetCommand.fromJson(json),
       _ => throw FormatException('unknown tool command: ${json['command']}'),
@@ -66,6 +72,26 @@ sealed class ToolCommand {
 sealed class LiveCommand extends ToolCommand {
   /// Creates a live-session command.
   const LiveCommand();
+}
+
+/// The tool's `set_theme` command: applies a theme before navigation.
+final class SetThemeCommand extends LiveCommand {
+  /// Creates a theme command for [theme].
+  const SetThemeCommand({required this.theme});
+
+  /// Parses the JSON object the tool sent.
+  ///
+  /// Throws [FormatException] if the theme is missing or unsupported.
+  factory SetThemeCommand.fromJson(Map<String, dynamic> json) {
+    final theme = _parseTheme(json['theme']);
+    if (theme == null) {
+      throw FormatException('set_theme command requires a theme');
+    }
+    return SetThemeCommand(theme: theme);
+  }
+
+  /// Theme requested by the tool.
+  final Brightness theme;
 }
 
 /// The tool's `start` command: which demo to play and how.
@@ -234,56 +260,4 @@ Brightness? _parseTheme(Object? raw) {
   if (raw == 'dark') return Brightness.dark;
   if (raw == 'light') return Brightness.light;
   throw FormatException('theme must be "dark" or "light", got $raw');
-}
-
-/// Encoders for the events the app reports back to the tool.
-class DemoEvents {
-  DemoEvents._();
-
-  /// Playing begins.
-  static Map<String, Object> demoStarted(int demo) => {
-    'event': ProtocolNames.demoStarted,
-    'demo': demo,
-  };
-
-  /// A still captured in-app, PNG bytes inline.
-  static Map<String, Object> screenshot(String name, Uint8List png) => {
-    'event': ProtocolNames.screenshot,
-    'name': name,
-    'png': base64Encode(png),
-  };
-
-  /// Playing finished.
-  static Map<String, Object> demoEnded(int demo) => {
-    'event': ProtocolNames.demoEnded,
-    'demo': demo,
-  };
-
-  /// Reports the app's registered screens.
-  static Map<String, Object> screens(List<Map<String, Object>> screens) => {
-    'event': ProtocolNames.screens,
-    'screens': screens,
-  };
-
-  /// Confirms that [screen] has been opened.
-  static Map<String, Object> navigated(String screen) => {
-    'event': ProtocolNames.navigated,
-    'screen': screen,
-  };
-
-  /// Confirms that the app has been reset.
-  static Map<String, Object> resetDone() => {'event': ProtocolNames.resetDone};
-
-  /// Header announcing [size] raw mp4 bytes that follow immediately.
-  static Map<String, Object> videoHeader(int demo, int size) => {
-    'event': ProtocolNames.video,
-    'demo': demo,
-    'size': size,
-  };
-
-  /// Something went wrong; the tool fails this run.
-  static Map<String, Object> error(String message) => {
-    'event': ProtocolNames.error,
-    'message': message,
-  };
 }
