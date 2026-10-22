@@ -113,6 +113,8 @@ the app running and requests named captures. See
 restoration and the wire contract. Apps can supply an `onSetTheme` hook for the
 `set_theme` command, register section `GlobalKey`s for scroll-to-section navigation, and request a
 full-length capture of vertical scrollable content.
+Apps can register a `LiveScreenRecord` so `navigate` opens one record by
+`record_id`.
 
 Live screen capture also works with the Windows desktop target using
 `flutter run -d windows`; it captures the Flutter view in-app and does not use

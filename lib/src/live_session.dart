@@ -62,9 +62,10 @@ class LiveSession {
     final sectionKey = command.section == null
         ? null
         : screen.section(command.section!);
+    final open = screen.opener(command.recordId);
     await _onPrepare?.call(command.settings, command.language);
     if (command.theme case final theme?) await themeHook!(theme);
-    await screen.open();
+    await open();
     await waitForSettledFrame();
     if (sectionKey != null) {
       final context = sectionKey.currentContext;

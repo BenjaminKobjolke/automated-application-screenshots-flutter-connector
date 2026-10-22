@@ -3,6 +3,24 @@ import 'package:flutter/widgets.dart';
 /// Screen definitions an app exposes to a live screenshot session.
 typedef ScreenOpen = Future<void> Function();
 
+/// Opens a screen for one record, such as a todo id.
+typedef RecordOpen = Future<void> Function(int id);
+
+/// Describes how a screen opens a record identified by an integer id.
+class LiveScreenRecord {
+  /// Creates a record-aware screen callback.
+  const LiveScreenRecord({required this.meaning, required this.open});
+
+  /// What the id means, reported to the screenshot tool, such as "todo id".
+  final String meaning;
+
+  /// Opens the screen for the given record id.
+  ///
+  /// Do not return a `Navigator.push*` future: it completes only when the
+  /// pushed route is popped, so the `navigate` command would never reply.
+  final RecordOpen open;
+}
+
 /// A screen the screenshot tool can open by name.
 class LiveScreen {
   /// Creates a named screen with its app-owned open callback.
@@ -12,6 +30,7 @@ class LiveScreen {
     required this.needsLogin,
     required this.open,
     this.sections = const {},
+    this.record,
   });
 
   /// Stable screen name used by the tool.
@@ -32,6 +51,22 @@ class LiveScreen {
   /// Widgets the screenshot tool can request to scroll into view by key.
   final Map<String, GlobalKey> sections;
 
+  /// Optional callback and description for opening one record by integer id.
+  final LiveScreenRecord? record;
+
+  /// The callback that opens this screen, for [recordId] when one is given.
+  ///
+  /// Throws [RecordIdNotSupportedError] if [recordId] is set but the screen
+  /// registered no [record].
+  ScreenOpen opener(int? recordId) {
+    if (recordId == null) return open;
+    final record = this.record;
+    if (record == null) {
+      throw RecordIdNotSupportedError('screen "$name" takes no record id');
+    }
+    return () => record.open(recordId);
+  }
+
   /// Returns the registered key for [name] or throws [UnknownSectionError].
   GlobalKey section(String name) {
     final key = sections[name];
@@ -45,12 +80,28 @@ class LiveScreen {
   }
 
   /// Encodes the screen metadata with the live protocol's field names.
-  Map<String, Object> toJson() => {
-    'name': name,
-    'description': description,
-    'needs_login': needsLogin,
-    if (sections.isNotEmpty) 'sections': sections.keys.toList(),
-  };
+  Map<String, Object> toJson() {
+    final record = this.record;
+    return {
+      'name': name,
+      'description': description,
+      'needs_login': needsLogin,
+      if (sections.isNotEmpty) 'sections': sections.keys.toList(),
+      if (record != null) 'record_id': record.meaning,
+    };
+  }
+}
+
+/// A record id was supplied for a screen that does not accept one.
+class RecordIdNotSupportedError implements Exception {
+  /// Creates the error with a ready-to-report [message].
+  const RecordIdNotSupportedError(this.message);
+
+  /// Human-readable reason the screen cannot open a record id.
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 /// No section with the requested name is registered on a screen.

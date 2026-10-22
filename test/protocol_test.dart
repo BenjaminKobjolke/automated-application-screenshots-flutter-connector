@@ -59,6 +59,25 @@ void main() {
     expect(navigate.language, isNull);
     expect(navigate.theme, isNull);
     expect(navigate.section, isNull);
+    expect(navigate.recordId, isNull);
+
+    final recordNavigate = ToolCommand.fromJson({
+      'command': 'navigate',
+      'screen': 'todo_detail',
+      'record_id': 11551,
+    }) as NavigateCommand;
+    expect(recordNavigate.recordId, 11551);
+
+    for (final recordId in ['11551', 1.5, true]) {
+      expect(
+        () => ToolCommand.fromJson({
+          'command': 'navigate',
+          'screen': 'todo_detail',
+          'record_id': recordId,
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    }
 
     final configuredNavigate = ToolCommand.fromJson({
       'command': 'navigate',

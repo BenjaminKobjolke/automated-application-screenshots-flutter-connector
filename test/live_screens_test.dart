@@ -32,6 +32,57 @@ void main() {
       'description': 'Settings screen',
       'needs_login': true,
     });
+    expect(
+      _screen(
+        'todo_detail',
+        record: LiveScreenRecord(meaning: 'todo id', open: (_) async {}),
+      ).toJson()['record_id'],
+      'todo id',
+    );
+  });
+
+  test(
+    'opener uses the plain callback when no record id is supplied',
+    () async {
+      var plainOpenCalled = false;
+      final screen = _screen(
+        'todo_detail',
+        record: LiveScreenRecord(meaning: 'todo id', open: (_) async {}),
+        open: () async => plainOpenCalled = true,
+      );
+
+      await screen.opener(null)();
+
+      expect(plainOpenCalled, isTrue);
+    },
+  );
+
+  test('opener passes a record id to its record callback', () async {
+    int? openedId;
+    final screen = _screen(
+      'todo_detail',
+      record: LiveScreenRecord(
+        meaning: 'todo id',
+        open: (id) async => openedId = id,
+      ),
+    );
+
+    await screen.opener(7)();
+
+    expect(openedId, 7);
+  });
+
+  test('opener rejects a record id when the screen has no record callback', () {
+    expect(
+      () => _screen('settings').opener(7),
+      throwsA(
+        isA<RecordIdNotSupportedError>().having(
+          (error) => error.message,
+          'message',
+          contains('settings'),
+        ),
+      ),
+    );
   });
 
   test('sections are included in JSON only when registered', () {
@@ -71,10 +122,13 @@ LiveScreen _screen(
   String name, {
   bool needsLogin = false,
   Map<String, GlobalKey> sections = const {},
+  LiveScreenRecord? record,
+  ScreenOpen? open,
 }) => LiveScreen(
   name: name,
   description: 'Settings screen',
   needsLogin: needsLogin,
   sections: sections,
-  open: () async {},
+  open: open ?? () async {},
+  record: record,
 );

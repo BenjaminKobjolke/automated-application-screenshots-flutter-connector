@@ -50,6 +50,16 @@ LiveScreenRegistry buildScreens(GlobalKey<NavigatorState> navigatorKey) =>
       sections: {'additional_information': bottomKey},
       open: () async => openLongForm(),
     ),
+    LiveScreen(
+      name: 'todo_detail',
+      description: 'Todo detail',
+      needsLogin: true,
+      open: () async => openNewestTodo(),
+      record: LiveScreenRecord(
+        meaning: 'todo id',
+        open: (id) async => openTodo(id),
+      ),
+    ),
   ]);
 
 AutomationDemoHost(
@@ -81,7 +91,9 @@ connection. Commands are handled in order, with one reply per command:
 | Command | Reply |
 | --- | --- |
 | `{"command":"list_screens"}` | `{"event":"screens","screens":[{"name":"account_settings","description":"Account settings","needs_login":true}]}` |
+| `{"command":"list_screens"}` for a record-aware screen | `{"event":"screens","screens":[{"name":"todo_detail","description":"Todo detail","needs_login":true,"record_id":"todo id"}]}` |
 | `{"command":"navigate","screen":"account_settings","settings":{"test_token":"..."},"language":"de"}` | `{"event":"navigated","screen":"account_settings"}` |
+| `{"command":"navigate","screen":"todo_detail","record_id":11551}` | `{"event":"navigated","screen":"todo_detail"}` |
 | `{"command":"set_theme","theme":"dark"}` | `{"event":"theme_set","theme":"dark"}` |
 | `{"command":"navigate","screen":"long_form","theme":"dark","section":"additional_information"}` | `{"event":"navigated","screen":"long_form"}` |
 | `{"command":"screenshot","name":"account_settings","pixel_ratio":1.0,"full":true}` | `{"event":"screenshot","name":"account_settings","png":"<base64 PNG>"}` |
@@ -100,6 +112,14 @@ updated frame settles. Without a hook, it returns
 The optional `theme` field on `navigate` remains supported for older tools; the
 connector calls its hook after `onPrepare` and before opening the screen. Apps
 should apply the theme in memory and restore it in `onRestore` when needed.
+
+## Record ids
+
+`navigate.record_id` must be a JSON integer. A record id sent to a screen without
+a `LiveScreenRecord` returns an error before `onPrepare` runs. When no id is
+sent, a record-aware screen uses its ordinary `open` callback, so the app can
+choose a fallback such as opening the newest matching record. A screen that
+requires an id can report that from its ordinary `open` callback.
 
 Register section keys on `LiveScreen.sections`, mapping stable section names to
 `GlobalKey`s attached to the corresponding widgets. `list_screens` includes a
@@ -147,6 +167,7 @@ reconnects and sends `navigate` again for the current screen.
 
 - Add the connector package and a `GlobalKey<NavigatorState>`.
 - Register stable screen names with descriptions and login requirements.
+- Register a `LiveScreenRecord` on screens that open one record by id.
 - Add an `onSetTheme` hook if live captures should switch the app theme.
 - Register section `GlobalKey`s for widgets that can be scrolled into view.
 - Use `full: true` for one-image captures of long vertical screens.

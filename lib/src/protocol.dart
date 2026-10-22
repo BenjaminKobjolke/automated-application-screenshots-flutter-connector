@@ -168,6 +168,7 @@ final class NavigateCommand extends LiveCommand {
     this.language,
     this.theme,
     this.section,
+    this.recordId,
   });
 
   /// Parses a navigation command.
@@ -176,12 +177,19 @@ final class NavigateCommand extends LiveCommand {
     if (screen is! String) {
       throw FormatException('navigate command requires a string screen');
     }
+    final rawRecordId = json['record_id'];
+    if (rawRecordId != null && rawRecordId is! int) {
+      throw FormatException(
+        'navigate record_id must be an integer, got $rawRecordId',
+      );
+    }
     return NavigateCommand(
       screen: screen,
       settings: _stringMap(json['settings']),
       language: json['language'] as String?,
       theme: _parseTheme(json['theme']),
       section: json['section'] as String?,
+      recordId: rawRecordId as int?,
     );
   }
 
@@ -199,6 +207,9 @@ final class NavigateCommand extends LiveCommand {
 
   /// Optional registered section to scroll into view after opening the screen.
   final String? section;
+
+  /// Optional record id passed to the screen's record callback.
+  final int? recordId;
 }
 
 /// Captures a still of the screen currently displayed by the app.
