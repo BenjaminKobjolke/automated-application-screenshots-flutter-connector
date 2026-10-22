@@ -1,18 +1,30 @@
 # Version
-1
+2
 
 # Coding Rules (Pointer)
 
-This project's coding rules live in `CODING_RULES.md` in the project root. They are
-BINDING for all code work in this repository.
+This project's rules live in two files in the project root:
 
-MANDATORY: Before writing or editing ANY code, you MUST Read `CODING_RULES.md`
-in full **in the current session**. Do not rely on memory of a previous session,
-a summary, or partial reads.
+- `CODING_RULES.md` — code quality and conventions. BINDING for all code work in
+  this repository, always.
+- `IMPLEMENTATION_FLOW.md` — the end-to-end flow to follow when planning and
+  implementing a change (checks, gates, Definition of Done).
 
-If you are about to make a code change and have not read `CODING_RULES.md` in
-this session: STOP, read it, then continue.
+MANDATORY: Before writing or editing ANY code, you MUST Read BOTH files in full
+**in the current session**. Do not rely on memory of a previous session, a
+summary, or partial reads.
 
-Do not inline rules back into this file and do not use `@import` for
-`CODING_RULES.md` — it is intentionally referenced, not imported.
+If you are about to make a code change and have not read both files in this
+session: STOP, read them, then continue.
 
+An external tool may orchestrate the implementation itself. When a skill or run
+states that the implementation is orchestrated, ignore `IMPLEMENTATION_FLOW.md`
+entirely — the orchestrator runs those steps as its own phases. `CODING_RULES.md`
+stays binding either way.
+
+Do not inline rules back into this file and do not use `@import` for either file —
+they are intentionally referenced, not imported.
+
+
+# graphify
+This project's code directory is `lib/`.

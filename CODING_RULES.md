@@ -1,9 +1,7 @@
 <!-- Managed by /coding-rules:apply — do not edit rule blocks by hand -->
-<!-- codex: enabled -->
-<!-- deepseek: disabled -->
 
 # Version
-3
+13
 
 Increase this version number whenever this rule file changes.
 
@@ -21,7 +19,9 @@ When working on a project, copy all relevant rules into the project's `CODING_RU
 mandates reading `CODING_RULES.md` before code work — never the full rules, and never an
 `@import` of `CODING_RULES.md` (imports auto-expand into context every turn).
 
-- Always include all rules from `COMMON_RULES.md` and `AI_RULES.md`
+- Always include all rules from `COMMON_RULES.md` and `IMPLEMENTATION_FLOW.md`.
+  `COMMON_RULES.md` is copied into the project's `CODING_RULES.md`;
+  `IMPLEMENTATION_FLOW.md` is copied into the project's own `IMPLEMENTATION_FLOW.md`
 - Also include applicable language-specific, project-type, and supplemental rule files
   (see `PROJECT_TYPES.md` for the project-type overview)
 - Include optional addon rule files only when the user has opted in to that addon
@@ -125,6 +125,34 @@ Every project must provide the following batch files in the `tools/` directory:
 
 These scripts ensure a consistent way to execute tests across environments.
 
+Both scripts must show progress while tests run: report the current setup stage, suite, or test
+before potentially slow work, and show results as execution proceeds. A start banner followed only
+by a final summary is insufficient. Prefer the runner's verbose output and stream or flush it so
+callers can see it during execution. Print one line per test: `flutter test --reporter expanded`,
+`pytest -v`, `phpunit --debug` (`--testdox` lists the tests only after the run on PHPUnit 10+).
+For a legitimate long wait without ordinary output, report the current stage or test and elapsed
+time at least every 60 seconds. Elapsed-time updates must not imply that a test completed or
+advanced. If output is captured for logs or filtering, keep progress visible during execution;
+replaying it only after completion does not count.
+
+Both must **exit with the test runner's own exit code** — capture it right after the run
+(`set TESTRESULT=%ERRORLEVEL%`) and end with `exit /b %TESTRESULT%`. A bat that prints
+"Some tests failed!" but exits 0 reports green to CI, to callers and to AI agents. Never pipe the
+test command into a plain filter — the pipe's exit code is the *filter's*, not the runner's. Never
+redirect the run into a temp file and print or filter that afterwards either: the script is then
+silent for the whole run. Run the command directly so its output streams. If output has to be
+filtered or logged, do it while it streams and return the runner's own code, e.g. `powershell
+-NoProfile -Command "<test command> | Where-Object { $_ -notmatch '<noise>' }; exit $LASTEXITCODE"`,
+or use the runner's own log-file option.
+
+---
+
+## No `pause` in Batch Files
+
+Batch files must never contain a `pause` line. `pause` waits for a keypress, so any bat that has one
+hangs forever when run by CI, another bat, or an AI agent. End with an explicit `exit /b <code>`
+instead, and let the caller decide whether to keep the window open (`cmd /k`).
+
 ---
 
 ## Prefer Type-Safe Values
@@ -156,6 +184,18 @@ existing equivalent. If found, copy or reference it. If not:
 
 This keeps cross-project tooling consistent and prevents the same script
 from being re-invented in every new project.
+
+---
+
+## New Projects Start From a Template
+
+Before creating a new project (an API, an app, a tool — anything that gets its own folder),
+ask the user whether a template project exists for that kind of project. Never scaffold from
+scratch without asking.
+
+- Run `/coding-rules:new-project`: it suggests the template remembered for that project type
+  in `~/.coding-rules/settings.json`, asks, and remembers a newly chosen template for next time.
+- A remembered template is a suggestion — still ask, the user may want another one or none.
 
 ---
 
@@ -268,6 +308,7 @@ The logger's name is fixed per language so it is the same known type in every pr
 | Dart/Flutter  | `AppLogger`        | `app_logger.dart`   |
 | Kotlin        | `AppLogger`        | `AppLogger.kt`      |
 | C# (plain)    | `AppLogger`        | `AppLogger.cs`      |
+| C++           | `AppLogger`        | `AppLogger.h` / `AppLogger.cpp` |
 | Unity C#      | `GameLog` (static) | `GameLog.cs`        |
 | Svelte/JS/TS  | `logger` (export)  | `logger.ts`         |
 | Arduino       | `Log`              | `Log.h` / `Log.cpp` |
@@ -282,6 +323,66 @@ responses.
 - Never trust external data; validate before processing
 - Use language-appropriate validation libraries (e.g., Pydantic, Zod, FluentValidation)
 - Fail fast with clear error messages when validation fails
+
+---
+
+## API Clients: the API Sorts, Filters and Pages (BINDING)
+
+Applies to every project that reads data from an API — app, SPA, desktop tool, script.
+
+- **Show what the API returns, in the order it returns it.** Never download a whole collection
+  to sort, filter, search, count, group or join it locally.
+- **Read lists page by page.** Send the page size and position and load the next page when the
+  user scrolls or asks for more. Never loop over all pages to rebuild the full list on start or
+  on refresh.
+- **A new order, filter or search is a new request** with that parameter, starting at the first
+  page. Reordering the rows already held is wrong as soon as the list is paged: the client holds
+  one page, not the list.
+- **Do not download again what you already hold.** After a create, update or delete use the row
+  the response returned, or re-request the visible page — not the whole collection.
+- **A missing parameter is API work.** When an API you own lacks the sort, filter, search,
+  paging or count a screen needs, request it from the API project (linked todo or
+  `/feedback:write`) and plan against that. "The list is small or unpaged today, so the client
+  can do it" is not a reason. For a third-party API that cannot change, use the paging and
+  sorting it offers and mark any remaining local work with a comment naming the missing
+  capability.
+
+The server half is `project_type/REST_API.md` -> "List Endpoints: Paging, Sorting, Filtering".
+
+---
+
+## Shared Contract Repository for API and Clients (BINDING)
+
+When two or more projects we own talk over the wire — an API plus an app, an API plus a desktop
+app, or all three — keep their shared values in one contract repository. This does not apply to
+third-party APIs.
+
+- **Why:** each side keeps its own copy of every value that crosses the wire. When one side adds a
+  value the other does not know, the other side can break (for example, the API added a todo type
+  and the watcher rejected the whole todo list).
+- **One separate repository** (`<system>-contract`) holds the contract: at minimum every shared
+  enum in `enums.json`, shaped as `"<Name>": {"values": [sorted unique], "direction":
+  "api_to_client" | "client_to_api", "description": "<where it appears>"}`, plus a `README.md`
+  with the change rules and the list of consumers. Do not add version numbers; the submodule
+  pointer is the version.
+- **Every project includes it as a git submodule at `contract/`.** Pick up changes with
+  `git submodule update --remote contract` and commit the pointer bump. Production code never
+  reads `contract/`; it is test input only.
+- **The API is the producer:** export the contract from its own constants (one map, one export
+  script) and add a freshness test that fails when the committed file differs from the export.
+- **Each client is a consumer:** test that every mapped enum matches the contract in its
+  direction (`api_to_client` sets are equal so the client knows every value;
+  `client_to_api` client values are a subset) and that every contract name is mapped.
+- Both tests skip when `contract/` is not checked out.
+- **Change order:** for an `api_to_client` value, update the contract, release clients that know
+  it, then have the API emit it. For a `client_to_api` value, update the contract and API first,
+  then have the client send it. To remove a value, stop it at the API, then remove it from the
+  contract, then from clients. Never rename a value; renaming is an add plus a remove. Add a new
+  shared enum to the contract in the same change that introduces it.
+- Clients still tolerate an unknown value (skip the row; do not fail the whole response) as a
+  last line of defence, not as permission to skip the order.
+- **Setting it up** is work in each project: when one project of the system lacks the submodule
+  or its test, request it there (linked todo or `/feedback:write`).
 
 ---
 
@@ -380,6 +481,14 @@ lists in consuming code.
 
 ---
 
+## Search Across Partial Words
+
+When implementing user-facing search, split the query on whitespace and match every term as a
+case-insensitive substring of the searchable text, regardless of term order. For example,
+`release bat` should find `release_build.bat`. Preserve the project's existing searchable fields.
+
+---
+
 ## Inject Collaborators, Don't Fold Dependencies In
 
 Composition reuse comes in two shapes, and they differ sharply in how much coupling they add to
@@ -422,233 +531,18 @@ the wrong side of **No God Classes**.
   fields.
 
 # Version
-18
-
-Increase this version number whenever this rule file changes.
-
-# AI Workflow Rules (All Languages)
-
-See `COMMON_RULES.md` for rules that apply to all languages.
-
-Unlike the per-language `*_RULES.md` files, these rules are **language-independent** and
-**always apply**. They are not subject to the "some rules may not apply to this project"
-filtering — include them in every project's `CODING_RULES.md`.
-
-These rules define the end-to-end workflow an AI agent must follow when planning and
-implementing changes. Each step is an existing skill referenced by its slash name; run the
-skill rather than reimplementing its behavior.
-
----
-
-## Delegation backends (Codex / DeepSeek)
-
-Some of the workflow steps below can be delegated to an external CLI instead
-of being performed by the agent itself. Two backends are supported, and they
-are **mutually exclusive** — at most one is enabled at a time:
-
-- `<!-- codex: enabled -->` — delegate to Codex, running:
-  `codex exec --dangerously-bypass-approvals-and-sandbox "<PROMPT>"`
-- `<!-- deepseek: enabled -->` — delegate to DeepSeek, running:
-  `reasonix run --auto "<PROMPT>"`
-- Neither marker `enabled` (or no marker) — do NOT delegate; perform the same
-  checks yourself via the listed fallback skills.
-
-Read precedence if both markers somehow end up `enabled`: Codex wins, then
-DeepSeek, then the self-fallback.
-
-**Self-fallback in a subagent.** When neither backend is enabled, prefer
-running each fallback skill in a subagent (Agent/Task tool, `general-purpose`
-type) rather than inline — the skill's file reads and reasoning stay out of
-the main context window. The subagent runs the skill and returns **only**
-its summary (and the list of files it changed). Any file edits the skill
-makes (plan file, code) persist, so the main agent picks them up.
-
-Exceptions that MUST stay in the main context: `/plan:dry-checked` (it
-reloads the adjusted plan INTO context) and restating the
-Definition-of-Done / DRY gate aloud.
-
-**Graphify preamble (optional).** If this project's `CODING_RULES.md` includes
-the graphify addon, prepend its graphify delegate preamble to every `<PROMPT>`
-below before invoking the backend CLI (see the graphify addon's "Delegated
-checks" section). If the addon is not present, send `<PROMPT>` unchanged.
-
-The markers are managed by `/coding-rules:codex on|off|status|test` and
-`/coding-rules:deepseek on|off|status|test` (or set during
-`/coding-rules:apply`). Do not flip them yourself without the user asking.
-
-### Delegation contract (never let a delegate hang)
-
-Applies to EVERY delegated `<PROMPT>` below, both backends. A delegate that
-stops to ask a question blocks forever on stdin nobody can answer — these four
-rules make that impossible and leave a debug trail when it happens anyway.
-
-- **No questions.** Append this suffix to every `<PROMPT>` before sending it:
-
-  > "Run fully non-interactively. NEVER ask a question and NEVER wait for
-  > input. If anything is ambiguous, blocked, or you cannot complete the task,
-  > do NOT stop to ask — write your questions and what blocked you into your
-  > output file (the plan file, or the check file for steps that write one)
-  > under a heading `## DELEGATE QUESTIONS`, then exit immediately. Always
-  > write the required SUMMARY block, even on failure."
-
-- **Timeout.** Run every delegate call with `timeout: 600000` (10 min, the
-  Bash tool maximum). Never make an untimed delegate call.
-
-- **Log.** Capture stdout+stderr to a log next to the plan file, named
-  `<plan-file-path-without-.md>-<step>-delegate.log` where `<step>` is
-  `plan-dry`, `convention`, `post-impl` or `graphify`; close stdin so a
-  delegate that ignores the contract dies instead of blocking:
-
-  ```
-  codex exec --dangerously-bypass-approvals-and-sandbox "<PROMPT>" > "<log>" 2>&1 < /dev/null
-  ```
-
-  Overwrite the log per run. On any failure, report the log path to the user
-  in one line — that is the debug handle.
-
-- **Success check + fallback.** A delegated step counts as done only if its
-  required SUMMARY block is present (`SUMMARY DRY`, `SUMMARY CONVENTION
-  CHECK`, `SUMMARY GRAPHIFY`, or the post-implementation check file). Timeout,
-  non-zero exit, missing SUMMARY, or a `## DELEGATE QUESTIONS` heading all
-  count as failure. On failure: do NOT retry — report one line plus the log
-  path, then run that step's `delegate disabled` branch (subagent). If the
-  delegate wrote `## DELEGATE QUESTIONS`, answer those questions yourself in
-  the fallback run, or surface them to the user if they need a decision.
-
-## Feature / Change Workflow
-
-After a plan is proposed and the user approves it, follow this chain. The DRY
-gate is a precondition for implementing — not just an earlier step.
-
-The approved plan must first exist as an explicit Markdown file. Pass that same
-path to both plan-DRY commands.
-
-```
-plan approved
-
-plan DRY check
-  delegate enabled (codex or deepseek — run <PROMPT> via that backend's CLI, see Delegation backends above; prepend graphify preamble if applicable; obey the Delegation contract — no-questions suffix, timeout, log, SUMMARY check):
-    <PROMPT> = "FULL PATH TO PLAN - Can you check the plan for DRY opportunities and if you find any, apply them to the original plan file. Only edit the plan file — do NOT modify any source code or implement the plan. Always add a summary at the end called SUMMARY DRY — if you made changes, describe what and why; if you found nothing, write 'No DRY opportunities found.'"
-  delegate disabled:
-    run /plan:dry <plan-file> in a subagent (see "Self-fallback in a
-    subagent"); inline only if a subagent isn't available.
-
-plan convention check
-  delegate enabled (codex or deepseek — run <PROMPT> via that backend's CLI, see Delegation backends above; prepend graphify preamble if applicable; obey the Delegation contract — no-questions suffix, timeout, log, SUMMARY check):
-    <PROMPT> = "FULL PATH TO PLAN $convention-check - If you want to make any changes, apply them to the original plan file. Only edit the plan file — do NOT modify any source code or implement the plan. Always add a summary at the end called SUMMARY CONVENTION CHECK — if you made changes, describe what and why; if you found nothing, write 'No convention issues found.'"
-  delegate disabled:
-    run /convention:check in a subagent (see note) — apply findings to the
-    plan file
-
-/plan:dry-checked    reload the DRY and convention adjusted plan
-
-restate Definition-of-Done aloud
-
-implement
-  While implementing, keep the list of every file you created or modified in THIS
-  session — you know it from your own edits; do NOT derive it from git (other
-  sessions may have concurrent uncommitted changes). After implementing, write the
-  list (one path per line) to a changed-files file next to the plan, named after it:
-  <plan-file-path-without-.md>-changed-files.md
-  (e.g. claude-plans/my-feature-changed-files.md). The plan file is unique per
-  session, so concurrent sessions never collide.
-  Include only source-code files. Exclude documentation and other non-code
-  files (`.md`, plain-text docs, the plan file itself) — the DRY audit only
-  looks at code.
-
-post-implementation DRY audit — scope is ONLY the changed-files file above
-  delegate enabled (codex or deepseek — run <PROMPT> via that backend's CLI, see Delegation backends above; prepend graphify preamble if applicable; obey the Delegation contract — no-questions suffix, timeout, log, SUMMARY check):
-    <PROMPT> = "Read FULL PATH TO CHANGED-FILES FILE and check ONLY the files listed there for DRY opportunities. Do not use git status or git diff to widen the scope — other sessions may have concurrent uncommitted changes. Do NOT modify any code. Write your suggestions to <plan-file-path-without-.md>-post-implementation-check.md (next to the plan, same naming as the changed-files file), overwriting the file if it already exists. Include for each finding the affected files and a short rationale. Always write the file, even if you found nothing — in that case write a SUMMARY block stating 'No DRY opportunities found.'"
-    then read that post-implementation-check file, validate each finding, and apply the valid ones. Bring a finding to the user only if a question arises — otherwise apply silently.
-  delegate disabled:
-    run /dry:check <files from the changed-files file, as pathspec> in a
-    subagent (see note)
-
-Post-Feature Verification + Post-Implementation Code Analysis (project-specific, below)
-
-refresh graphify graph — only if the graphify addon is present in this project's CODING_RULES.md
-  NEVER run this rebuild yourself in the main context: the graphify skill loads a
-  large instruction file and its build output into the window. Delegate it — the
-  rules it must follow live in the graphify addon's "Refreshing after a code
-  change" section, already copied into this project's CODING_RULES.md.
-  delegate enabled (codex or deepseek — run <PROMPT> via that backend's CLI, see Delegation backends above; prepend graphify preamble if applicable; obey the Delegation contract — no-questions suffix, timeout, log, SUMMARY check):
-    <PROMPT> = "Rebuild this project's graphify knowledge graph. Read the graphify section of CODING_RULES.md and follow its 'Refreshing after a code change' rules exactly, including the scope rules — rebuild at the scope the existing graph already has, never narrower. Run the graphify skill's directed rebuild from the repo root (/graphify <code-dir> --directed), writing to the root graphify-out/. Do NOT run a bare `graphify update`. If the graphify skill is not available to you, change nothing and reply exactly GRAPHIFY SKILL UNAVAILABLE. Otherwise end with a summary called SUMMARY GRAPHIFY stating the scan root built, whether graph.json has directed: true, and the node count before and after."
-  delegate disabled:
-    run the same rebuild in a subagent (see "Self-fallback in a subagent") with the
-    same instructions; it returns only the SUMMARY GRAPHIFY block.
-  then verify yourself — cheap, no skill load: root `graphify-out/graph.json` has
-  `directed: true`, and `graphify-out/.graphify_root` matches the scope that was
-  built. If the delegate replied GRAPHIFY SKILL UNAVAILABLE, or either check fails,
-  redo the rebuild via the subagent branch.
-```
-
-### DRY gate (precondition for implementing)
-
-Do not write a single line until ALL are true. Restate this gate aloud at the
-moment you start implementing — if you cannot, the gate is not cleared:
-
-- [ ] `/plan:dry <plan-file>` adjusted that file and completed its Ponytail pass.
-- [ ] `/plan:dry-checked <plan-file>` reloaded the same adjusted plan.
-- [ ] `/convention:check` found the existing utilities/patterns to reuse.
-
-The gate survives the `implement` step: if mid-implementation you add a new
-helper, type, or pattern the gate would have caught, stop and re-clear it
-before continuing.
-
-### Definition of Done — restate aloud before implementing
-
-Before the first edit, state in chat what "done" means for THIS change:
-
-- [ ] Scope: <one line — what changes, what does not>
-- [ ] Reuse: <existing function/component this builds on, with path>
-- [ ] DRY gate cleared (above)
-- [ ] `/dry:check <session changed-files>` clean (scoped to the changed-files file, never bare; may run via subagent)
-- [ ] `/verify:after-change` green (tests + analysis; may run via subagent)
-
-### Post-implementation DRY audit — paste-in template
-
-Run `/dry:check` scoped to the session's changed-files file, then paste and fill:
-
-```
-DRY audit — <change name>
-Changed files:     <list from the changed-files file, not git>
-Duplication found: <none | describe>
-Consolidated into: <shared fn/module + path | n/a>
-Convention reused: <name + path>
-Verdict:           <clean | needs rework>
-```
-
----
-
-## Bug-Fix Workflow
-
-Bug fixes use a shorter variant (no plan-DRY phase):
-
-```
-bugs:fix
-  → /verify:after-change  (run in a subagent — see "Self-fallback in a
-    subagent")
-```
-
----
-
-## Optional Addons
-
-These live in `ai_rules_addons/` and are **not** always-on. Each is opt-in per project — ASK
-the user whether they want it before wiring it into that project's `CODING_RULES.md`.
-
-- [`ai_rules_addons/graphify.md`](ai_rules_addons/graphify.md) — graphify knowledge graph:
-  scoped + directed AST build, folder layout, gitignore, and the query/refresh rules to paste
-  into a project's `CODING_RULES.md`.
-
-# Version
-6
+14
 
 Increase this version number whenever this rule file changes.
 
 # Flutter Rules (FVM + Mobile)
 
 See `COMMON_RULES.md` for rules that apply to all languages.
+
+## Optional rule files
+
+- `flutter/APP.md` — Flutter apps: localization, Cubit, Dio, ObjectBox, Logarte, app icons, project structure and APK build scripts. Skip it for library/plugin packages.
+- Run `/coding-rules:apply` to add it when the project is an app.
 
 ## Core principles
 
@@ -711,7 +605,8 @@ Use `part` only when:
    ```
 
    Applies to `freezed`, `json_serializable`, `objectbox` (`objectbox.g.dart`), and
-   similar — see the JSON Serialization and Database (ObjectBox) sections.
+   similar — see the JSON Serialization section and, for apps, the ObjectBox section in
+   `flutter/APP.md`.
 
 2. **One tightly-coupled library** (rare) — several files that genuinely form a
    single library and must share library-private (`_`) members.
@@ -810,438 +705,6 @@ fvm flutter build apk
 
 ---
 
-## Localization
-
-Use the `flutter_i18n_translations` library for multi-language support:
-https://github.com/BenjaminKobjolke/flutter-i18n-translations
-
-### Installation
-
-Add to `pubspec.yaml`:
-
-```yaml
-dependencies:
-  flutter_i18n_translations:
-    git:
-      url: https://github.com/BenjaminKobjolke/flutter-i18n-translations.git
-```
-
-Then run:
-
-```bash
-fvm flutter pub get
-```
-
-### Directory Structure
-
-```
-project/
-├── assets/
-│   └── i18n/
-│       ├── en.json         # English (default)
-│       ├── de.json         # German
-│       └── languages.json  # Language metadata
-├── lib/
-│   ├── config/
-│   │   ├── constants.dart
-│   │   └── translation_keys.dart
-│   └── main.dart
-└── pubspec.yaml
-```
-
-### Configure Assets
-
-In `pubspec.yaml`:
-
-```yaml
-flutter:
-  assets:
-    - assets/i18n/
-```
-
-### Translation File Format
-
-Create `assets/i18n/en.json`:
-
-```json
-{
-  "app": {
-    "name": "My Application",
-    "welcome": "Welcome, {name}!"
-  },
-  "nav": {
-    "dashboard": "Dashboard",
-    "settings": "Settings",
-    "logout": "Logout"
-  },
-  "auth": {
-    "login_title": "Login",
-    "signin_subtitle": "Sign in to access your dashboard",
-    "error": {
-      "auth_failed": "Authentication failed. Please try again.",
-      "rate_limited": "Too many attempts. Please try again later."
-    }
-  },
-  "common": {
-    "cancel": "Cancel",
-    "save": "Save",
-    "delete": "Delete",
-    "edit": "Edit"
-  }
-}
-```
-
-Create `assets/i18n/languages.json`:
-
-```json
-{
-  "en": "English",
-  "de": "Deutsch"
-}
-```
-
-### Initialization
-
-In `main.dart`:
-
-```dart
-import 'package:flutter/material.dart';
-import 'package:flutter_i18n_translations/flutter_i18n_translations.dart';
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize localization
-  final localizationService = LocalizationService();
-  final languageCode = await determineSystemLanguage();
-  await localizationService.load(languageCode);
-  AppLocalizations.init(localizationService);
-
-  runApp(const MyApp());
-}
-```
-
-### Usage in Widgets
-
-```dart
-import 'package:flutter_i18n_translations/flutter_i18n_translations.dart';
-import 'package:myapp/config/translation_keys.dart';
-
-class MyWidget extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Simple translation
-        Text(AppLocalizations.tr(TK.appName)),
-
-        // With parameters
-        Text(AppLocalizations.tr(TK.appWelcome,
-          params: {'name': 'John'}
-        )),
-
-        // Get current language
-        Text('Current: ${AppLocalizations.currentLanguage}'),
-      ],
-    );
-  }
-}
-```
-
----
-
-## Translation Key Naming Convention
-
-Use dot notation with logical grouping:
-
-```
-section.subsection.key
-
-app.name               - Application info
-nav.dashboard          - Navigation items
-auth.login_title       - Authentication related
-auth.error.auth_failed - Nested error messages
-common.save            - Reusable UI elements
-```
-
----
-
-## Translation Keys as Constants
-
-Using raw strings like `AppLocalizations.tr('nav.dashboard')` is error-prone. Create a `TK` class with all keys as constants for IDE autocomplete and compile-time checking.
-
-Create `lib/config/translation_keys.dart`:
-
-```dart
-// lib/config/translation_keys.dart
-class TK {
-  TK._();
-
-  // App
-  static const String appName = 'app.name';
-  static const String appWelcome = 'app.welcome';
-
-  // Navigation
-  static const String navDashboard = 'nav.dashboard';
-  static const String navSettings = 'nav.settings';
-  static const String navLogout = 'nav.logout';
-
-  // Auth
-  static const String authLoginTitle = 'auth.login_title';
-  static const String authSigninSubtitle = 'auth.signin_subtitle';
-  static const String authErrorAuthFailed = 'auth.error.auth_failed';
-  static const String authErrorRateLimited = 'auth.error.rate_limited';
-
-  // Common
-  static const String commonCancel = 'common.cancel';
-  static const String commonSave = 'common.save';
-  static const String commonDelete = 'common.delete';
-  static const String commonEdit = 'common.edit';
-}
-```
-
-Usage:
-
-```dart
-import 'package:myapp/config/translation_keys.dart';
-
-// Instead of:
-AppLocalizations.tr('nav.dashboard');
-
-// Use:
-AppLocalizations.tr(TK.navDashboard);
-```
-
-### Benefits
-
-- IDE autocomplete for all translation keys
-- Compile-time error if constant doesn't exist
-- Easy to find all usages of a key
-- Refactoring support
-
-### Detecting unused or missing keys
-
-Every Flutter project that uses the `TK` pattern **must** ship tooling that
-detects all of the following:
-
-1. TK constants whose i18n path does not exist (broken at runtime).
-2. TK constants with no callers (dead Dart code).
-3. i18n leaves with no TK constant pointing at them (orphan translations).
-4. Raw `AppLocalizations.tr('literal')` calls that bypass the TK class.
-
-Reference implementation: `tools/check_translation_keys.dart` +
-`tools/check_translation_keys.bat`, shipped in `flutter_setup_files/tools/`.
-Run the audit whenever a TK constant or i18n key is added or removed, and
-do not consider the change complete while the audit reports any issue. The
-`--fix` flag auto-substitutes matchable raw literals **and** auto-creates
-TK constants for raw literals that already have a matching i18n leaf;
-remaining "broken" entries (raw literal whose i18n leaf is missing too)
-must be resolved by hand.
-
-Copy the whole set — the three scripts below plus `translation_key_audit.dart`
-and the `.bat` wrappers. Only two constants in `check_translation_keys.dart`
-are per-project: `_topKeyToClass` (top-level i18n key → owning `TK*` class)
-and `_packageName`.
-
-Companion tooling lives next to the audit script:
-
-- `translation_key_audit.dart` — the shared detector every script imports.
-  Layout, TK parsing, and the caller scan live here so a pruner can never
-  drift from the audit and delete keys the audit considers live.
-- `prune_unused_translation_keys.dart` — deletes dead TK constants from
-  `lib/config/translation_keys/tk_*.dart`. Safe because the audit
-  guarantees zero references. Drops only the declaration lines, leaving the
-  rest of the file byte-identical.
-- `prune_orphan_i18n_leaves.dart` — removes i18n leaves no caller
-  references (TK or raw literal). When `tools/attributes_to_remove.json`
-  exists, removed paths are merged into it so a translator batch can strip
-  them from locale files the script does not own; projects without that
-  batch never create the file.
-- `split_translation_keys.dart` — when the project's `TK` class grows past
-  ~500 lines, split it into one `TKModule` class per top-level i18n key
-  group with a barrel re-export. The split keeps every existing
-  `TK.foo`-style call site valid after a one-shot codemod.
-
-Two detection rules exist because a naive audit reports false positives on
-both, and a pruner acting on them destroys working code:
-
-- **`...Prefix` constants.** A constant whose name ends in `Prefix` holds a
-  partial path completed at runtime — `tr('${TKStats.weekStatusPrefix}$s')`.
-  It is treated as matching any leaf below its value, so it is not "missing"
-  and the leaves it reaches are not orphans.
-- **The `_tr` wrapper.** Widgets commonly define
-  `String _tr(String key) => AppLocalizations.tr(key);` and call `_tr(...)`.
-  The raw-literal scan matches both spellings; matching only
-  `AppLocalizations.tr` makes category 4 blind to most of the codebase.
-
-Both i18n layouts are auto-detected at startup — modular
-(`assets/i18n/modules.json` + `assets/i18n/<module>/<locale>.json`) and
-single-file (`assets/i18n/<locale>.json`). Locales come from
-`assets/i18n/languages.json`.
-
----
-
-## Language Switching
-
-```dart
-// Get available languages
-final languages = AppLocalizations.getAvailableLanguages(); // ['de', 'en']
-
-// Get language display name
-final displayName = AppLocalizations.getLanguageName('de'); // "Deutsch"
-
-// Switch language
-await localizationService.load('de');
-// Rebuild UI (e.g., restart app or use state management)
-```
-
-### Persisting Language Choice
-
-```dart
-import 'package:shared_preferences/shared_preferences.dart';
-
-Future<void> changeLanguage(String languageCode) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('language', languageCode);
-  await localizationService.load(languageCode);
-}
-
-// On app start
-final prefs = await SharedPreferences.getInstance();
-final savedLanguage = prefs.getString('language');
-final languageCode = savedLanguage ?? await determineSystemLanguage();
-```
-
----
-
-## Adding New Languages
-
-1. Copy `assets/i18n/en.json` to `assets/i18n/de.json`
-2. Translate all values (keep keys identical)
-3. Update `assets/i18n/languages.json`:
-
-```json
-{
-  "en": "English",
-  "de": "Deutsch"
-}
-```
-
----
-
-## Project Structure
-
-Standard Flutter mobile project structure:
-
-```
-project/
-├── android/                    # Android platform files
-├── ios/                        # iOS platform files
-├── assets/
-│   ├── i18n/                   # Translation files
-│   └── images/                 # Image assets
-├── lib/
-│   ├── config/
-│   │   ├── app_config.dart     # API URLs, timeouts
-│   │   ├── constants.dart      # App constants
-│   │   └── translation_keys.dart
-│   ├── models/                 # Data models & ObjectBox entities
-│   ├── repositories/           # Data access (ObjectBox CRUD)
-│   ├── services/
-│   │   ├── api_client.dart     # Dio HTTP client singleton
-│   │   └── objectbox_service.dart  # ObjectBox initialization
-│   ├── screens/                # Full-screen widgets
-│   ├── widgets/                # Reusable widgets
-│   ├── objectbox.g.dart        # Generated ObjectBox code
-│   ├── objectbox-model.json    # Generated ObjectBox model
-│   └── main.dart
-├── test/                       # Unit and widget tests
-├── tools/                      # Build scripts
-│   ├── run_tests.bat
-│   ├── build_debug.bat
-│   └── build_release.bat
-├── .fvmrc                      # FVM Flutter version
-├── pubspec.yaml
-├── install.bat
-├── update.bat
-└── README.md
-```
-
----
-
-## Project Setup Scripts
-
-Copy the setup batch files from the `flutter_setup_files/` folder bundled with the
-coding-rules plugin (next to this rules file).
-
-### install.bat
-
-Initial project setup:
-
-- Checks if FVM is installed
-- Runs `fvm install` to install Flutter version
-- Runs `fvm flutter pub get` to install dependencies
-- Runs tests to verify setup
-
-### update.bat
-
-Update all dependencies:
-
-- Updates dependencies with `fvm flutter pub upgrade`
-- Runs `fvm flutter analyze` for linting
-- Runs tests to verify compatibility
-
-### tools/run_tests.bat
-
-Run the test suite:
-
-- Runs `fvm flutter test`, redirected to a temp file so the script captures
-  flutter test's own exit code before anything else touches it
-- Shows pass/fail summary based on that captured exit code, then `exit /b`s
-  with it
-- If you add noise filtering for third-party log spam, filter the temp file
-  with PowerShell `Select-String -NotMatch` (see comment in the bat) - never
-  pipe `fvm flutter test` straight into `findstr`. The pipe's exit code
-  becomes the filter's exit code, not flutter test's, so a real failure can
-  silently read as a pass (or vice versa). `findstr` also has a ~8191-char
-  line-length limit and errors on long compact-reporter lines, tripping the
-  same bug even harder.
-
-### tools/build_debug.bat
-
-Build debug APK:
-
-- Runs `fvm flutter build apk --debug`
-- Shows output location
-
-### tools/build_release.bat
-
-Build release APK:
-
-- Runs `fvm flutter build apk --release`
-- Shows output location
-
-### Usage
-
-```bash
-# First time setup
-install.bat
-
-# Run tests
-tools\run_tests.bat
-
-# Build debug APK
-tools\build_debug.bat
-
-# Build release APK
-tools\build_release.bat
-
-# Update dependencies
-update.bat
-```
-
----
-
 ## Approved Libraries
 
 Before implementing any new feature, **check
@@ -1259,20 +722,69 @@ applied to dependencies instead of scripts.
 
 ---
 
-## App Icons
+## Pin Android Dependencies Declared as Version Ranges
 
-Whenever icons are involved — setting up a new project's launcher icon, replacing
-existing art, adding a notification icon, or debugging one that renders wrong —
-**read [`flutter_setup_files/ICONS.md`](flutter_setup_files/ICONS.md) first.**
+Some plugins' Android SDKs declare dependencies as **version ranges** (seen: OneSignal Android
+SDK 5.10.0 via `onesignal_flutter` 5.6.10). For a range Gradle must list the available versions
+on Google Maven (`dl.google.com`) and caches that list for only 24 hours; an exact version
+resolves from the local Gradle cache with no network. A build with range-declared dependencies
+therefore needs Google Maven to answer about once a day. When it does not, the release build
+fails in `:app:mergeReleaseNativeLibs` with `Could not resolve ...{require [...]}` and
+`Repository Google is disabled due to earlier error below` — with no code change and every
+artifact already cached.
 
-House style is a **solid black background with simple white line art**. The guide
-covers why (an adaptive icon's background layer must be opaque, so transparent is
-not an option), the source-art layout, the `flutter_launcher_icons` config, and
-the separate white-on-transparent notification icon Android needs — pointing a
-notification at the launcher icon renders a featureless white blob in the status
-bar.
+**The app's Gradle build forces every range-declared Android module to the version it already
+resolves to.**
 
-Each project records its own paths and wiring in `docs/ICONS.md`.
+Find the ranges, from `android/`:
+
+```bash
+gradlew :app:dependencies --configuration releaseRuntimeClasspath --console=plain
+```
+
+- Every `{require [...]}` line is a range (a bare `[1.0, 2.0)` or `1.+` request is the same
+  thing); the version after `->` is the one to pin.
+- The command exits 0 even when resolution fails. `FAILED` lines are the signal, never the
+  exit code.
+- Add `--offline` to read the report from the Gradle cache while Google Maven does not answer.
+
+Pin them in `android/build.gradle.kts`, as its own block after the `allprojects { repositories
+{ ... } }` block:
+
+```kotlin
+// OneSignal 5.10.0 declares these as version ranges. Gradle re-lists a range on Google Maven
+// once its 24-hour cache expires, so the build failed whenever dl.google.com did not answer,
+// although every artifact was already cached. Forcing the versions the ranges resolved to
+// removes that request. force also holds a module down, so after upgrading onesignal_flutter
+// or any plugin that needs one of these: remove this block, run
+// `gradlew :app:dependencies --configuration releaseRuntimeClasspath`, and pin what each
+// `{require [...]}` line resolves to.
+allprojects {
+    configurations.configureEach {
+        resolutionStrategy.force(
+            "com.google.firebase:firebase-messaging:24.0.0",
+            "androidx.work:work-runtime:2.8.1",
+        )
+    }
+}
+```
+
+A Groovy `android/build.gradle` takes the same block with single-quoted strings and no
+trailing comma.
+
+Rules:
+
+- **Pin what the range resolves to in this app, never a version copied from another app.**
+  Other plugins can raise a module above the declaring plugin's range (seen: `androidx.browser`
+  at 1.9.0 through `url_launcher_android`, above OneSignal's `[1.0.0, 1.3.99]`).
+- **Use `resolutionStrategy.force`, not `eachDependency`.** Replacing only the range requests
+  through `eachDependency` still sends a request to `dl.google.com`.
+- **The pins carry a comment** naming the declaring plugin and version, why the pins exist, and
+  how to re-derive them, as in the example.
+- **Re-derive after upgrading** the declaring plugin or any plugin that needs a pinned module:
+  a forced version also holds the module down. Remove the block, run the report, pin again.
+- The pins remove only the daily version lookup. A library that was never downloaded (after a
+  package or Flutter upgrade) still needs Google Maven once.
 
 ---
 
@@ -1287,39 +799,6 @@ Recommended baseline:
 - Flutter/Dart SDK version constraints
 - Dependencies managed via `fvm flutter pub add ...`
 - Lock file committed: `pubspec.lock`
-
-### Standard Dependencies
-
-```yaml
-dependencies:
-  flutter:
-    sdk: flutter
-
-  # Localization
-  flutter_i18n_translations:
-    git:
-      url: https://github.com/BenjaminKobjolke/flutter-i18n-translations.git
-
-  # HTTP
-  dio: ^5.9.0
-
-  # Database
-  objectbox: ^5.1.0
-
-  # Utilities
-  path_provider: ^2.1.0
-  path: ^1.9.0
-  shared_preferences: ^2.2.0
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^3.0.0
-
-  # ObjectBox code generation
-  objectbox_generator: ^5.1.0
-  build_runner: ^2.4.0
-```
 
 ---
 
@@ -1360,44 +839,6 @@ class AppConfig {
   static const bool debugMode = true;
 }
 ```
-
-### Sensitive Data
-
-Never commit API keys, secrets, or credentials to version control. Use `.env` files for sensitive values:
-
-1. Add `flutter_dotenv` to `pubspec.yaml`:
-
-```yaml
-dependencies:
-  flutter_dotenv: ^5.1.0
-```
-
-2. Create a `.env` file in the project root:
-
-```
-API_KEY=your_secret_key_here
-API_SECRET=your_secret_here
-```
-
-3. Add `.env` to `.gitignore`:
-
-```
-.env
-```
-
-4. Load in `main.dart`:
-
-```dart
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
-void main() async {
-  await dotenv.load(fileName: ".env");
-  // Access values: dotenv.env['API_KEY']
-  runApp(const MyApp());
-}
-```
-
-5. Provide a `.env.example` file (committed) with placeholder values so other developers know which keys are required.
 
 ---
 
@@ -1459,9 +900,9 @@ Future<void> loadUser(int userId) async {
   try {
     final user = await _userService.getUser(userId);
     emit(state.copyWith(user: user));
-  } on DioException catch (e) {
-    developer.log('Failed to load user $userId', name: 'UserCubit', error: e);
-    emit(state.copyWith(errorMessage: AppLocalizations.tr(TK.errorLoadFailed)));
+  } catch (e, stackTrace) {
+    AppLogger.e('Failed to load user $userId', error: e, stackTrace: stackTrace);
+    // Map the exception to this package's error representation.
   }
 }
 ```
@@ -1485,442 +926,22 @@ Rules:
 
 ---
 
-## 6) Required Batch Files
 
-Every project must include these batch files:
-
-- `install.bat` - In the root directory, initial project setup
-- `update.bat` - In the root directory, update dependencies
-- `tools/run_tests.bat` - Runs the test suite
-- `tools/build_debug.bat` - Builds debug APK
-- `tools/build_release.bat` - Builds release APK
-
----
-
-## 7) State Management (Cubit)
-
-Use **Cubit** from the `flutter_bloc` package for state management. Cubit is the recommended approach for all Flutter projects.
-
-### Why Cubit?
-
-- **Simpler than BLoC**: No events, just methods that emit states
-- **Predictable**: Clear separation between UI and business logic
-- **Testable**: Easy to unit test state changes
-- **Scalable**: Works for simple screens and complex apps alike
-- **Less boilerplate**: Compared to full BLoC pattern
-
-### Installation
-
-```yaml
-dependencies:
-  flutter_bloc: ^8.1.0
-  equatable: ^2.0.5  # For state comparison
-```
-
-```bash
-fvm flutter pub get
-```
-
-### Basic Example
-
-**State class** (`lib/cubits/counter_state.dart`):
-
-```dart
-import 'package:equatable/equatable.dart';
-
-class CounterState extends Equatable {
-  final int count;
-  final bool isLoading;
-
-  const CounterState({
-    this.count = 0,
-    this.isLoading = false,
-  });
-
-  CounterState copyWith({int? count, bool? isLoading}) {
-    return CounterState(
-      count: count ?? this.count,
-      isLoading: isLoading ?? this.isLoading,
-    );
-  }
-
-  @override
-  List<Object?> get props => [count, isLoading];
-}
-```
-
-**Cubit class** (`lib/cubits/counter_cubit.dart`):
-
-```dart
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'counter_state.dart';
-
-class CounterCubit extends Cubit<CounterState> {
-  CounterCubit() : super(const CounterState());
-
-  void increment() {
-    emit(state.copyWith(count: state.count + 1));
-  }
-
-  void decrement() {
-    emit(state.copyWith(count: state.count - 1));
-  }
-
-  Future<void> loadFromApi() async {
-    emit(state.copyWith(isLoading: true));
-    // Simulate API call
-    await Future.delayed(const Duration(seconds: 1));
-    emit(state.copyWith(count: 42, isLoading: false));
-  }
-}
-```
-
-**Usage in Widget**:
-
-```dart
-import 'package:flutter_bloc/flutter_bloc.dart';
-import '../cubits/counter_cubit.dart';
-import '../cubits/counter_state.dart';
-
-class CounterScreen extends StatelessWidget {
-  const CounterScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => CounterCubit(),
-      child: const CounterView(),
-    );
-  }
-}
-
-class CounterView extends StatelessWidget {
-  const CounterView({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Counter')),
-      body: BlocBuilder<CounterCubit, CounterState>(
-        builder: (context, state) {
-          if (state.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          return Center(
-            child: Text('Count: ${state.count}'),
-          );
-        },
-      ),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          FloatingActionButton(
-            onPressed: () => context.read<CounterCubit>().increment(),
-            child: const Icon(Icons.add),
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            onPressed: () => context.read<CounterCubit>().decrement(),
-            child: const Icon(Icons.remove),
-          ),
-        ],
-      ),
-    );
-  }
-}
-```
-
-### Project Structure
-
-```
-lib/
-├── cubits/
-│   ├── counter_cubit.dart
-│   ├── counter_state.dart
-│   ├── auth_cubit.dart
-│   └── auth_state.dart
-├── screens/
-│   └── counter_screen.dart
-└── main.dart
-```
-
-### Key Patterns
-
-- **One Cubit per feature/screen**: Keep cubits focused
-- **Immutable states**: Always use `copyWith` pattern
-- **Equatable**: Use for efficient state comparison
-- **BlocProvider**: Provide cubits at the widget level
-- **BlocBuilder**: Rebuild UI when state changes
-- **BlocListener**: Handle side effects (navigation, snackbars)
-
----
-
-## 8) HTTP Communication (Dio)
-
-Use Dio for all HTTP communication.
-
-### Installation
-
-```bash
-fvm flutter pub add dio
-```
-
-Add to `pubspec.yaml`:
-
-```yaml
-dependencies:
-  dio: ^5.9.0
-```
-
-### API Client Singleton
-
-Create `lib/services/api_client.dart`:
-
-```dart
-import 'package:dio/dio.dart';
-import 'package:myapp/config/app_config.dart';
-
-class ApiClient {
-  ApiClient._();
-
-  static final Dio _dio = Dio(
-    BaseOptions(
-      baseUrl: AppConfig.apiBaseUrl,
-      connectTimeout: AppConfig.requestTimeout,
-      receiveTimeout: AppConfig.requestTimeout,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-    ),
-  );
-
-  static Dio get instance => _dio;
-}
-```
-
-### Usage Example
-
-```dart
-import 'package:myapp/services/api_client.dart';
-
-class UserService {
-  final Dio _dio = ApiClient.instance;
-
-  Future<Map<String, dynamic>> getUser(int id) async {
-    final response = await _dio.get('/users/$id');
-    return response.data;
-  }
-
-  Future<Map<String, dynamic>> createUser(Map<String, dynamic> data) async {
-    final response = await _dio.post('/users', data: data);
-    return response.data;
-  }
-}
-```
-
-### Error Handling
-
-```dart
-import 'package:dio/dio.dart';
-
-Future<void> fetchData() async {
-  try {
-    final response = await ApiClient.instance.get('/data');
-    // Handle success
-  } on DioException catch (e) {
-    switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.receiveTimeout:
-        // Handle timeout
-        break;
-      case DioExceptionType.badResponse:
-        final statusCode = e.response?.statusCode;
-        // Handle HTTP errors (400, 401, 404, 500, etc.)
-        break;
-      case DioExceptionType.connectionError:
-        // Handle no internet
-        break;
-      default:
-        // Handle other errors
-        break;
-    }
-  }
-}
-```
-
----
-
-## 9) Database (ObjectBox)
-
-Use ObjectBox for local persistence.
-
-### Installation
-
-Add to `pubspec.yaml`:
-
-```yaml
-dependencies:
-  objectbox: ^5.1.0
-
-dev_dependencies:
-  objectbox_generator: ^5.1.0
-  build_runner: ^2.4.0
-```
-
-Run:
-
-```bash
-fvm flutter pub get
-fvm dart run build_runner build
-```
-
-### Entity Example
-
-Create `lib/models/user.dart`:
-
-```dart
-import 'package:objectbox/objectbox.dart';
-
-@Entity()
-class User {
-  @Id()
-  int id = 0;
-
-  String name;
-  String email;
-
-  @Property(type: PropertyType.date)
-  DateTime createdAt;
-
-  User({
-    this.id = 0,
-    required this.name,
-    required this.email,
-    DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
-}
-```
-
-### ObjectBox Initialization
-
-Create `lib/services/objectbox_service.dart`:
-
-```dart
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
-import '../objectbox.g.dart';
-
-class ObjectBoxService {
-  ObjectBoxService._();
-
-  static Store? _store;
-
-  static Store get store {
-    if (_store == null) {
-      throw Exception('ObjectBox not initialized. Call init() first.');
-    }
-    return _store!;
-  }
-
-  static Future<void> init() async {
-    if (_store != null) return;
-
-    final dir = await getApplicationDocumentsDirectory();
-    final dbPath = p.join(dir.path, 'objectbox');
-    _store = await openStore(directory: dbPath);
-  }
-
-  static void close() {
-    _store?.close();
-    _store = null;
-  }
-}
-```
-
-Initialize in `main.dart`:
-
-```dart
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize ObjectBox
-  await ObjectBoxService.init();
-
-  // Initialize localization
-  // ...
-
-  runApp(const MyApp());
-}
-```
-
-### Basic CRUD Operations
-
-```dart
-import 'package:myapp/models/user.dart';
-import 'package:myapp/services/objectbox_service.dart';
-import '../objectbox.g.dart';
-
-class UserRepository {
-  final Box<User> _box = ObjectBoxService.store.box<User>();
-
-  // Create or Update
-  int put(User user) {
-    return _box.put(user);
-  }
-
-  // Get by ID
-  User? get(int id) {
-    return _box.get(id);
-  }
-
-  // Get all
-  List<User> getAll() {
-    return _box.getAll();
-  }
-
-  // Delete
-  bool delete(int id) {
-    return _box.remove(id);
-  }
-
-  // Query
-  List<User> findByName(String name) {
-    final query = _box.query(User_.name.equals(name)).build();
-    final results = query.find();
-    query.close();
-    return results;
-  }
-}
-```
-
----
-
-## 10) In-App Debugger (Logarte)
-
-For debugging network requests and viewing logs directly on the device, use Logarte.
-
-See the detailed integration guide: [In-App Debugger Documentation](flutter/IN_APP_DEBUGGER.md)
-
-**Requirements:**
-- Must be accessible from the Settings screen
-- Must be enable/disable via `AppConfig.enableLogarte`
-
-**Key features:**
-- Network request logging (automatic with Dio interceptor)
-- Navigation event logging
-- Searchable log viewer
-- Password protection for release builds
-- Log sharing and export
-
----
-
-## Dependency Injection
-
-Use `GetIt` for service location and dependency injection. Register services at app startup and
-retrieve them via `GetIt.instance`. This keeps services decoupled and testable.
-
----
+### tools/run_tests.bat
+
+Run the test suite:
+
+- Runs `fvm flutter test --reporter expanded` directly, so one line per test
+  appears while the tests run and the script captures flutter test's own exit code
+- Shows pass/fail summary based on that captured exit code, then `exit /b`s with it
+- Never redirect the run into a temp file and print it afterwards: the script is
+  then silent for the whole run and a hanging test looks like a slow suite
+- If you add noise filtering for third-party log spam, filter live with the
+  PowerShell line from the comment in the bat (it ends in `exit $LASTEXITCODE`) -
+  never pipe `fvm flutter test` straight into `findstr`. The pipe's exit code
+  becomes the filter's exit code, not flutter test's, so a real failure can
+  silently read as a pass (or vice versa). `findstr` also has a ~8191-char
+  line-length limit and errors on long lines.
 
 ## JSON Serialization
 
@@ -1937,42 +958,6 @@ Minimize unnecessary widget rebuilds to maintain smooth performance:
 - Extract subtrees into separate widgets to limit rebuild scope
 - Avoid building large widget trees inside a single `build` method
 - Use `BlocSelector` or `BlocBuilder` with `buildWhen` to rebuild only when relevant state changes
-
----
-
-## Respect System Insets (SafeArea)
-
-Screen-level content must never render underneath the system UI — the status bar,
-the notch/cutout, or the bottom navigation/gesture bar. Otherwise bottom controls
-(a Save button, an FAB, the last list item) sit partly behind the Android nav bar
-and are hard or impossible to tap.
-
-- **Wrap the `Scaffold` `body` in a `SafeArea`** for any screen whose content can
-  reach a screen edge — especially scrollable bodies (`ListView`, `SingleChildScrollView`,
-  `Column` with a bottom button). The `AppBar` already handles the top inset; the
-  bottom inset is the one that bites.
-
-  ```dart
-  // Anti-pattern: bottom button scrolls under the nav bar
-  body: ListView(padding: const EdgeInsets.all(16), children: [...]),
-
-  // Correct: SafeArea insets the scroll view above the system bars
-  body: SafeArea(
-    child: ListView(padding: const EdgeInsets.all(16), children: [...]),
-  ),
-  ```
-
-- `EdgeInsets` padding is **not** a substitute — a hardcoded padding value does not
-  track the device's actual inset (varies by phone, gesture vs button nav, landscape).
-- **Don't double-inset.** A `Scaffold` `appBar` already consumes the top inset; if you
-  keep `SafeArea` defaults (`top: true`) under an `AppBar` it's harmless (inset is
-  already zero there), but don't also add manual top padding on top of it.
-- For a body behind a keyboard, `Scaffold.resizeToAvoidBottomInset` (default `true`)
-  handles the keyboard; `SafeArea` handles the persistent system bars. They are
-  separate concerns — keep both defaults on unless you have a reason not to.
-- Full-bleed content (a background image, an edge-to-edge map) is the deliberate
-  exception: opt out per-edge (`SafeArea(bottom: false, ...)`) rather than dropping
-  `SafeArea` entirely, so only the intended edge bleeds.
 
 ---
 
@@ -2099,3 +1084,99 @@ Reinforces core principle #1 (Composition over inheritance) and
 // Correct: extract InvoiceHeader / InvoiceActions child widgets; inject services via provider,
 //          pass an InvoiceViewConfig value object instead of a dozen constructor params
 ```
+
+# Version
+14
+
+Increase this version number whenever this rule file changes.
+
+# graphify Knowledge Graph (Optional Addon)
+
+graphify turns a code folder into a queryable knowledge graph — god nodes, communities,
+cross-file relationships, fan-in/fan-out. Use it to orient before grep and to spot god classes.
+
+**Keep the build AST-only (no LLM, no API cost) by scoping to the code dir.** graphify runs a
+free deterministic AST pass on *code* files, but a separate **LLM pass** on every *non-code*
+file — docs, `.md`, `.txt`, config `.yaml`, images (vision), audio/video (whisper). That pass
+needs an LLM (Gemini key or the host agent) and costs tokens. A build scoped to a pure-code dir
+(`lib/`, `src/`, `app/`) has zero non-code files, so it skips the LLM pass entirely and rebuilds
+need no AI. A repo-root build (`/graphify .`) sweeps in `docs/`, `README.md`, icons, and sound
+assets — forcing the LLM pass. **Always scope to the code dir; never build the repo root.**
+
+---
+
+Setup instructions live in the coding-rules plugin at `graphify_setup_files/SETUP.md`.
+
+## Folder layout (know which is which)
+
+- `graphify-out/` at the **project root** = the **live graph** (`graph.json`, `GRAPH_REPORT.md`,
+  `graph.html`). The only one queries read. Keep it `directed=True`.
+- `graphify-out/cache/` at the project root = AST cache written by the CLI refresh (it runs
+  with `GRAPHIFY_OUT` pointing at the root folder, see "Refreshing"). Scratch only.
+- `<code-dir>/graphify-out/` = legacy AST cache from the skill build. Never the live graph
+  under the documented flow; safe to delete. If a `graph.json` ever appears in there, a bare
+  `graphify update` ran without `GRAPHIFY_OUT` — delete that `graph.json`, keep `cache/`.
+
+## What the graph knows (and does not)
+
+- Knows: code structure — classes, methods, calls, references, extends/implements, plus
+  fan-in/fan-out and community / god-node structure.
+- Does NOT know: business rules, API response shape, or rendered template/view output. It is a
+  snapshot — stale until rebuilt. Constants referenced by string can appear as isolated nodes
+  (AST limitation, not a missing dependency).
+
+---
+
+## Using the graph
+
+- For codebase questions, run `graphify query "<question>"` first when `graphify-out/graph.json`
+  exists. `graphify path "<A>" "<B>"` for relationships; `graphify explain "<concept>"` for a
+  focused node. These return a small scoped subgraph vs. reading GRAPH_REPORT.md or raw grep.
+- Judge coupling by direction: high **fan-in** + low fan-out (shared base / constants / DTO) is
+  healthy; high **fan-out** (>~20 outgoing deps) is god-class risk and a refactor signal.
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review, or when
+  query/path/explain do not surface enough context.
+
+## Manual refresh bat (`tools/graphify_update.bat`)
+
+Copied from the `graphify_update.bat` template beside this addon, adjusted (`CODE_DIR`).
+Run it from anywhere — it `pushd`es to the repo root itself.
+
+- **Does:** (1) the live-graph CLI refresh from "Refreshing after a code change" in
+  `IMPLEMENTATION_FLOW.md` (sets `GRAPHIFY_OUT` to the root
+  `graphify-out\`, passes the absolute code dir); (2) smoke test — prints the root
+  graph's `directed` flag + node count, `god-nodes`, a sample `query`.
+- **Does NOT:** re-extract docs (see "Doc changes" in `IMPLEMENTATION_FLOW.md`) or build a first graph — that is the
+  skill flow (`/graphify <code-dir> --directed`).
+- **When to use:** after a code change outside an AI session, or as a "is graphify still
+  wired up?" check after cloning, a dependency change, or a graphify upgrade.
+
+## In-tree vendored code — exclude it, scoping alone won't
+
+`--directed`-scoping the build to `<code-dir>` keeps external `vendor/`/`node_modules/` out
+automatically, but a **committed** third-party library living *inside* `<code-dir>` (a bundled
+SDK, a copied library folder) is not gitignored, so graphify scans it like first-party code.
+Symptom: god-nodes / oversized communities in `GRAPH_REPORT.md` whose class names belong to a
+library, not the app (e.g. hundreds of `Facebook*`/`GraphNode*` nodes from an in-tree Facebook
+SDK).
+
+Fix once per project:
+
+1. Spot the vendored folder(s) under `<code-dir>` (e.g. `application/libs/`). Committed
+   **asset/sprite dirs** are the same kind of noise — bundled UI images (jQuery-UI/colorbox
+   sprites, e.g. `extensions/backend/assets/images/`) aren't code but graphify still scans them;
+   exclude them the same way.
+2. Drop a `.graphifyignore` at the scan root (gitignore syntax, honored by default):
+   ```
+   # Vendored / third-party code + bundled assets — not our architecture, noise in the graph
+   libs/
+   ```
+3. Rebuild with the CLI refresh plus `--force` — a narrower corpus is a *smaller* graph,
+   which trips the shrink guard (#479):
+   `GRAPHIFY_OUT="$PWD/graphify-out" graphify update --force "$PWD/<code-dir>"`.
+   Do NOT delete `graphify-out/graph.json` first (see "Refreshing after a code change" in
+   `IMPLEMENTATION_FLOW.md`: the CLI would rebuild
+   it undirected and drop the doc nodes).
+4. Verify: grep the vendored library's distinctive class name in the new `graph.json` — it
+   should return only first-party code that *uses* the library (e.g. your own `FacebookManager`),
+   never the library's own classes.
