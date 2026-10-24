@@ -18,3 +18,7 @@ tmp/commit_msg.tmp
 code_analysis_results/
 tools/analyze_code_config.bat
 .reasonix/
+
+# Stray report artifacts of the tickets watcher: a botched redirect at repo root
+# turns the plain-words summary into a file name that holds only a report path
+/The project now has*
