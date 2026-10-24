@@ -1,0 +1,140 @@
+{
+  "log_level": "all",
+  "global_exclude_paths": [
+    ".git",
+    ".dart_tool",
+    ".fvm",
+    "build",
+    "code_analysis_results",
+    "android",
+    "ios",
+    "linux",
+    "macos",
+    "web",
+    "windows"
+  ],
+  "max_lines_per_file": {
+    "enabled": true,
+    "warning": 300,
+    "error": 500,
+    "exclude_paths": [
+      ".git",
+      ".dart_tool",
+      ".fvm",
+      "build",
+      "code_analysis_results",
+      "android",
+      "ios",
+      "linux",
+      "macos",
+      "web",
+      "windows"
+    ],
+    "exclude_patterns": ["*.g.dart", "*.freezed.dart", "*.mocks.dart", "*.gr.dart"]
+  },
+  "pmd_duplicates": {
+    "enabled": true,
+    "minimum_tokens": 100,
+    "exclude_paths": [
+      ".git",
+      ".dart_tool",
+      ".fvm",
+      "build",
+      "code_analysis_results",
+      "android",
+      "ios",
+      "linux",
+      "macos",
+      "web",
+      "windows"
+    ],
+    "exclude_patterns": {
+      "dart": ["*.g.dart", "*.freezed.dart", "*.mocks.dart", "*.gr.dart"]
+    }
+  },
+  "pmd_similar_code": {
+    "enabled": false,
+    "minimum_tokens": 100,
+    "ignore_identifiers": true,
+    "ignore_literals": true,
+    "ignore_annotations": false
+  },
+  "dart_analyze": {
+    "enabled": true
+  },
+  "dart_code_linter": {
+    "enabled": true,
+    "auto_install": false,
+    "analyze_path": "lib",
+    "keep_report": false,
+    "metrics": {
+      "cyclomatic-complexity": {
+        "warning": 10,
+        "error": 15
+      }
+    }
+  },
+  "flutter_analyze": {
+    "enabled": false,
+    "exclude_patterns": ["*.g.dart", "*.freezed.dart"]
+  },
+  "dart_unused_files": {
+    "enabled": true,
+    "analyze_path": "lib",
+    "entry_points": ["lib/automated_screenshot_connector.dart"],
+    "exclude_patterns": ["*.g.dart", "*.freezed.dart"],
+    "include_test_imports": false
+  },
+  "dart_unused_dependencies": {
+    "enabled": true,
+    "check_dev_dependencies": true,
+    "severity": "warning",
+    "ignore_packages": ["flutter", "flutter_test", "flutter_lints"]
+  },
+  "dart_import_rules": {
+    "enabled": false,
+    "analyze_path": "lib",
+    "exclude_patterns": ["*.g.dart", "*.freezed.dart"]
+  },
+  "dart_unused_code": {
+    "enabled": true,
+    "analyze_path": "lib",
+    "exclude_patterns": ["*.g.dart", "*.freezed.dart"],
+    "ignore_names": ["main", "build"],
+    "scan_test_references": true,
+    "severity": "warning"
+  },
+  "dart_missing_dispose": {
+    "enabled": true,
+    "analyze_path": "lib",
+    "exclude_patterns": ["*.g.dart", "*.freezed.dart"],
+    "severity": "warning",
+    "disposable_types": {
+      "AnimationController": "dispose",
+      "TextEditingController": "dispose",
+      "ScrollController": "dispose",
+      "TabController": "dispose",
+      "PageController": "dispose",
+      "FocusNode": "dispose",
+      "StreamSubscription": "cancel",
+      "StreamController": "close",
+      "Timer": "cancel"
+    },
+    "custom_disposable_types": {}
+  },
+  "dart_test_coverage": {
+    "enabled": false,
+    "run_tests": true,
+    "lcov_path": "coverage/lcov.info",
+    "test_timeout": 600,
+    "overall_coverage": {
+      "warning": 60,
+      "error": 40
+    },
+    "per_file_coverage": {
+      "warning": 50,
+      "error": 20
+    },
+    "exclude_patterns": ["*.g.dart", "*.freezed.dart"]
+  }
+}
