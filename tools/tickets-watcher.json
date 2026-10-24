@@ -17,9 +17,16 @@
     },
     "tools\\run_integration_tests.bat": {
       "test": "green"
+    },
+    "tools\\analyze_changed_and_new_files.bat": {
+      "code_quality": "green"
     }
   },
   "command_check_scripts": [
+    "analyze_changed_and_new_files.bat",
+    "analyze_code.bat",
+    "analyze_code_config.bat",
+    "analyze_code_config.example.bat",
     "graphify_update.bat",
     "run_integration_tests.bat",
     "run_tests.bat"

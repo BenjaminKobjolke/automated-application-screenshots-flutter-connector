@@ -89,7 +89,7 @@
     "enabled": true,
     "check_dev_dependencies": true,
     "severity": "warning",
-    "ignore_packages": ["flutter", "flutter_test", "flutter_lints"]
+    "ignore_packages": ["flutter", "flutter_test", "flutter_lints", "dart_code_linter"]
   },
   "dart_import_rules": {
     "enabled": false,
