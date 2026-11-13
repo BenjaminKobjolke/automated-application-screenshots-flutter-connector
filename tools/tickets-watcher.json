@@ -18,7 +18,7 @@
       "test": "green"
     },
     "tools\\run_integration_tests.bat": {
-      "test": "failed"
+      "test": "green"
     },
     "tools\\analyze_changed_and_new_files.bat": {
       "code_quality": "green"
