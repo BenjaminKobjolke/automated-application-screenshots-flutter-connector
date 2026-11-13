@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import 'frame_settle.dart';
 import 'full_length_capture.dart';
+import 'live_gesture.dart';
 import 'live_screens.dart';
 import 'protocol.dart';
 
@@ -49,6 +50,7 @@ class LiveSession {
         SetThemeCommand() => await _setTheme(command),
         NavigateCommand() => await _navigate(command),
         ScreenshotCommand() => await _screenshot(command),
+        GestureCommand() => await _gesture(command),
         ResetCommand() => await _reset(command),
       };
     } on Object catch (error) {
@@ -96,6 +98,34 @@ class LiveSession {
     await waitForSettledFrame();
     final png = await _capture.capture(command.pixelRatio, full: command.full);
     return DemoEvents.screenshot(command.name, png);
+  }
+
+  Future<Map<String, Object>> _gesture(GestureCommand command) async {
+    final gesture = command.gesture;
+    final section = gesture.section;
+    final Rect target;
+    if (section == null) {
+      target = _capture.boundaryRect;
+    } else {
+      final screen = _screens.get(gesture.screen!);
+      final key = screen.section(section);
+      final context = key.currentContext;
+      if (context == null) {
+        throw StateError(
+          'section "$section" of screen "${screen.name}" is not built',
+        );
+      }
+      final render = context.findRenderObject();
+      if (render is! RenderBox || !render.hasSize) {
+        throw StateError(
+          'section "$section" of screen "${screen.name}" has no size',
+        );
+      }
+      target = render.localToGlobal(Offset.zero) & render.size;
+    }
+    await GestureDriver().perform(gesture, target);
+    await waitForSettledFrame();
+    return DemoEvents.gestured(gesture.kind);
   }
 
   Future<Map<String, Object>> _reset(ResetCommand command) async {

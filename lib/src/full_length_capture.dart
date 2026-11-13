@@ -18,6 +18,12 @@ class LiveCapture {
   final StillCapture _still;
   final ValueNotifier<double?> _extraHeight;
 
+  /// Global app-view bounds used to map live gesture fractions to the screen.
+  Rect get boundaryRect {
+    final boundary = _boundary;
+    return boundary.localToGlobal(Offset.zero) & boundary.size;
+  }
+
   /// Captures the viewport or the full rendered extent of the active screen.
   Future<Uint8List> capture(double pixelRatio, {bool full = false}) async {
     if (!full) return _still.capture(pixelRatio);

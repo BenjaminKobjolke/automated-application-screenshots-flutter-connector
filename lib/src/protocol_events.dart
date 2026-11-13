@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
+import 'live_gesture.dart';
 import 'protocol.dart';
 
 /// Encoders for the events the app reports back to the tool.
@@ -44,6 +45,12 @@ class DemoEvents {
   static Map<String, Object> themeSet(Brightness theme) => {
     'event': ProtocolNames.themeSet,
     'theme': theme.name,
+  };
+
+  /// Confirms that [kind] has finished on the current screen.
+  static Map<String, Object> gestured(GestureKind kind) => {
+    'event': ProtocolNames.gestured,
+    'kind': kind.wireName,
   };
 
   /// Confirms that the app has been reset.

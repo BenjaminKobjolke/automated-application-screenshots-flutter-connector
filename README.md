@@ -21,9 +21,10 @@ The library itself is pure Dart; it also ships one host-side script,
 | `steps.dart` | Step model (`TapStep`, `TypeTextStep`, `PauseStep`, `ScreenshotStep`, `CustomStep`), `DemoScript`, JSON codec, `localizeSteps`, `estimatedDuration` |
 | `registry.dart` | `DemoRegistry` — id → script, `customActions` for `custom` steps, `UnknownDemoError` |
 | `protocol.dart` | Typed tool commands and `DemoEvents` encoders for demo and live sessions |
+| `live_gesture.dart` | Validates and performs live tap, drag and pinch gestures |
 | `client.dart` | `DemoClient` — TCP link, ordered command stream, event lines + raw mp4 upload; never throws into the app. `connectWithRetry` + `ConnectRetry` keep waiting for the tool, so app and tool start in either order |
 | `live_screens.dart` | `LiveScreenRegistry` — app-owned screen names, descriptions, login requirements and open callbacks |
-| `live_session.dart` | `LiveSession` — lists screens, navigates, captures stills and resets state |
+| `live_session.dart` | `LiveSession` — lists screens, navigates, captures stills, resets state and performs gestures |
 | `full_length_capture.dart` | `LiveCapture` — captures the viewport or expands a vertical scrollable for one tall image |
 | `frame_settle.dart` | Waits for a rendered frame and transient callbacks before live replies |
 | `still_capture.dart` | `StillCapture` — `RepaintBoundary.toImage` → PNG bytes |
@@ -106,7 +107,7 @@ navigation and in-app screenshots. Register each route in a
 `LiveScreenRegistry`, provide it to `AutomationDemoHost`, and use the app's
 `navigatorKey` in each screen's `open` callback. `navigate` runs `onPrepare`
 first, so the same request can restore a screen after hot reload or restart.
-The connector handles `list_screens`, `set_theme`, `navigate`, `screenshot` and
+The connector handles `list_screens`, `set_theme`, `navigate`, `gesture`, `screenshot` and
 `reset` over the existing JSON-lines connection. The screenshot tool's `--live` driver keeps
 the app running and requests named captures. See
 [docs/LIVE_SCREENS.md](docs/LIVE_SCREENS.md) for registration, test-login
@@ -115,6 +116,10 @@ restoration and the wire contract. Apps can supply an `onSetTheme` hook for the
 full-length capture of vertical scrollable content.
 Apps can register a `LiveScreenRecord` so `navigate` opens one record by
 `record_id`.
+
+The `gesture` command performs a tap, one-finger drag or two-finger pinch on the
+current view. See [docs/LIVE_SCREENS.md](docs/LIVE_SCREENS.md#gestures) for its
+wire fields, defaults and section targeting.
 
 Live screen capture also works with the Windows desktop target using
 `flutter run -d windows`; it captures the Flutter view in-app and does not use

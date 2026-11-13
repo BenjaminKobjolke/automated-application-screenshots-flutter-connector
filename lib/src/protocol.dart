@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import 'live_gesture.dart';
 import 'steps.dart';
 
 export 'protocol_events.dart';
@@ -21,6 +22,9 @@ abstract final class ProtocolNames {
   /// The command that captures the current screen.
   static const String screenshot = 'screenshot';
 
+  /// The command that performs a touch gesture on the current screen.
+  static const String gesture = 'gesture';
+
   /// The command that restores the app's initial state.
   static const String reset = 'reset';
 
@@ -32,6 +36,9 @@ abstract final class ProtocolNames {
 
   /// The event confirming the app's theme was changed.
   static const String themeSet = 'theme_set';
+
+  /// The event confirming that a gesture has finished.
+  static const String gestured = 'gestured';
 
   /// The event confirming a reset.
   static const String resetDone = 'reset_done';
@@ -62,6 +69,7 @@ sealed class ToolCommand {
       ProtocolNames.navigate => NavigateCommand.fromJson(json),
       ProtocolNames.setTheme => SetThemeCommand.fromJson(json),
       ProtocolNames.screenshot => ScreenshotCommand.fromJson(json),
+      ProtocolNames.gesture => GestureCommand.fromJson(json),
       ProtocolNames.reset => ResetCommand.fromJson(json),
       _ => throw FormatException('unknown tool command: ${json['command']}'),
     };
@@ -242,6 +250,19 @@ final class ScreenshotCommand extends LiveCommand {
 
   /// Whether to capture the full scrollable content.
   final bool full;
+}
+
+/// Performs one tap, drag or pinch gesture on the current screen.
+final class GestureCommand extends LiveCommand {
+  /// Creates a gesture command wrapping [gesture].
+  const GestureCommand(this.gesture);
+
+  /// Parses a gesture command from the tool's JSON object.
+  factory GestureCommand.fromJson(Map<String, dynamic> json) =>
+      GestureCommand(LiveGesture.fromJson(json));
+
+  /// Validated gesture details.
+  final LiveGesture gesture;
 }
 
 /// Restores the app to its initial state.

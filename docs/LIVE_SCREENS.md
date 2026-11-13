@@ -97,6 +97,9 @@ connection. Commands are handled in order, with one reply per command:
 | `{"command":"set_theme","theme":"dark"}` | `{"event":"theme_set","theme":"dark"}` |
 | `{"command":"navigate","screen":"long_form","theme":"dark","section":"additional_information"}` | `{"event":"navigated","screen":"long_form"}` |
 | `{"command":"screenshot","name":"account_settings","pixel_ratio":1.0,"full":true}` | `{"event":"screenshot","name":"account_settings","png":"<base64 PNG>"}` |
+| `{"command":"gesture","kind":"tap","at":[0.5,0.5]}` | `{"event":"gestured","kind":"tap"}` |
+| `{"command":"gesture","kind":"drag","from":[0.5,0.7],"to":[0.5,0.3],"duration_ms":400}` | `{"event":"gestured","kind":"drag"}` |
+| `{"command":"gesture","kind":"pinch","center":[0.5,0.5],"scale":2,"screen":"image_viewer","section":"image"}` | `{"event":"gestured","kind":"pinch"}` |
 | `{"command":"reset","settings":{},"language":null}` | `{"event":"reset_done"}` |
 
 Failures return the existing `{"event":"error","message":"..."}` event;
@@ -112,6 +115,23 @@ updated frame settles. Without a hook, it returns
 The optional `theme` field on `navigate` remains supported for older tools; the
 connector calls its hook after `onPrepare` and before opening the screen. Apps
 should apply the theme in memory and restore it in `onRestore` when needed.
+
+## Gestures
+
+The debug-only `gesture` command touches the screen currently shown and does not
+navigate. `tap` uses `at: [x, y]`; `drag` uses `from: [x, y]` and `to: [x, y]`;
+`pinch` uses `center: [x, y]` and a positive `scale` (above `1` zooms in,
+below `1` zooms out). Each point is a pair of fractions from `0` to `1` within
+the full app view. To target a registered section instead, send both its
+`screen` name and `section` key; those fractions are then relative to that
+widget's bounds.
+
+`duration_ms` is optional: taps hold for `100` ms, while drags and pinches move
+over `300` ms by default. Invalid gesture kinds, point shapes or ranges, and
+non-positive durations or pinch scales return the usual `error` event. A
+missing screen or section also returns `error`. The connector replies with
+`gestured` after Flutter's gesture handling and the resulting frame settle. Send
+a `screenshot` command afterwards to capture the changed view.
 
 ## Record ids
 
