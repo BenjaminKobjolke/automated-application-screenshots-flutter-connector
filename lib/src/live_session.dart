@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'frame_settle.dart';
 import 'full_length_capture.dart';
 import 'live_gesture.dart';
+import 'live_input_driver.dart';
 import 'live_screens.dart';
 import 'protocol.dart';
 
@@ -22,15 +23,18 @@ class LiveSession {
   const LiveSession({
     required LiveScreenRegistry screens,
     required LiveCapture capture,
+    required LiveInputDriver input,
     PrepareCallback? onPrepare,
     ThemeCallback? onSetTheme,
   }) : _screens = screens,
        _capture = capture,
+       _input = input,
        _onPrepare = onPrepare,
        _onSetTheme = onSetTheme;
 
   final LiveScreenRegistry _screens;
   final LiveCapture _capture;
+  final LiveInputDriver _input;
   final PrepareCallback? _onPrepare;
   final ThemeCallback? _onSetTheme;
 
@@ -51,6 +55,10 @@ class LiveSession {
         NavigateCommand() => await _navigate(command),
         ScreenshotCommand() => await _screenshot(command),
         GestureCommand() => await _gesture(command),
+        InputCommand() => await _input.handle(
+          command.input,
+          _capture.boundaryRect,
+        ),
         ResetCommand() => await _reset(command),
       };
     } on Object catch (error) {

@@ -130,7 +130,36 @@ void main() {
           'event': 'navigated',
           'screen': 'home',
         });
+        await tester.pumpAndSettle();
         expect(find.text('Home screen'), findsOneWidget);
+        final visibleText = await send({'command': 'read_text'});
+        expect(visibleText['event'], 'visible_text');
+        expect(
+          (visibleText['entries'] as List).any(
+            (entry) => (entry as Map)['text'] == 'Open details',
+          ),
+          isTrue,
+        );
+        final openDetails = (visibleText['entries'] as List)
+            .cast<Map>()
+            .singleWhere((entry) => entry['text'] == 'Open details');
+        final bounds = (openDetails['bounds'] as List).cast<num>();
+        final viewSize =
+            tester.view.physicalSize / tester.view.devicePixelRatio;
+        final tapCenter = Offset(
+          (bounds[0] + bounds[2]) * viewSize.width / 2,
+          (bounds[1] + bounds[3]) * viewSize.height / 2,
+        );
+        final buttonCenter = tester.getRect(find.text('Open details')).center;
+        expect(tapCenter.dx, closeTo(buttonCenter.dx, 1));
+        expect(tapCenter.dy, closeTo(buttonCenter.dy, 1));
+        expect(await send({'command': 'tap_text', 'text': 'Open details'}), {
+          'event': 'text_tapped',
+          'text': 'Open details',
+        });
+        await tester.tap(find.text('Open details'));
+        await tester.pumpAndSettle();
+        expect(find.text('Details screen'), findsOneWidget);
 
         await events.cancel();
         await connection.close();

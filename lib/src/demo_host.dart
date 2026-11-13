@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 
 import 'app_logger.dart';
@@ -9,7 +10,10 @@ import 'client.dart';
 import 'full_length_capture.dart';
 import 'live_screens.dart';
 import 'live_session.dart';
+import 'live_gesture.dart';
+import 'live_input_driver.dart';
 import 'protocol.dart';
+import 'visible_text.dart';
 import 'registry.dart';
 import 'screen_recorder.dart';
 import 'step_executor.dart';
@@ -99,6 +103,7 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
   final ValueNotifier<double?> _extraHeight = ValueNotifier(null);
   DemoClient? _client;
   StreamSubscription<void>? _subscription;
+  SemanticsHandle? _semantics;
   var _live = false;
 
   @override
@@ -138,9 +143,22 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
         await _runDemo(command);
       case LiveCommand():
         _live = true;
+        if (!kReleaseMode) {
+          _semantics ??= SemanticsBinding.instance.ensureSemantics();
+        }
         final session = LiveSession(
           screens: widget.screens ?? LiveScreenRegistry(),
           capture: LiveCapture(StillCapture(_boundaryKey), _extraHeight),
+          input: LiveInputDriver(
+            steps: StepExecutor(
+              still: StillCapture(_boundaryKey),
+              onStill: (_, _) {},
+              actions: widget.registry.customActions,
+            ),
+            reader: const VisibleTextReader(),
+            gestures: GestureDriver(),
+            devicePixelRatio: View.of(context).devicePixelRatio,
+          ),
           onPrepare: widget.onPrepare,
           onSetTheme: widget.onSetTheme,
         );
@@ -211,6 +229,7 @@ class _AutomationDemoHostState extends State<AutomationDemoHost> {
   void dispose() {
     _subscription?.cancel();
     _client?.close();
+    _semantics?.dispose();
     _extraHeight.dispose();
     super.dispose();
   }

@@ -1,60 +1,12 @@
 import 'package:flutter/foundation.dart';
 
 import 'live_gesture.dart';
+import 'live_input.dart';
+import 'protocol_names.dart';
 import 'steps.dart';
 
+export 'protocol_names.dart';
 export 'protocol_events.dart';
-
-/// Names used by the JSON-lines command and event protocol.
-abstract final class ProtocolNames {
-  /// The command that starts a demo.
-  static const String start = 'start';
-
-  /// The command that lists registered screens.
-  static const String listScreens = 'list_screens';
-
-  /// The command that opens a registered screen.
-  static const String navigate = 'navigate';
-
-  /// The command that changes the app's theme.
-  static const String setTheme = 'set_theme';
-
-  /// The command that captures the current screen.
-  static const String screenshot = 'screenshot';
-
-  /// The command that performs a touch gesture on the current screen.
-  static const String gesture = 'gesture';
-
-  /// The command that restores the app's initial state.
-  static const String reset = 'reset';
-
-  /// The event reporting registered screens.
-  static const String screens = 'screens';
-
-  /// The event confirming a screen navigation.
-  static const String navigated = 'navigated';
-
-  /// The event confirming the app's theme was changed.
-  static const String themeSet = 'theme_set';
-
-  /// The event confirming that a gesture has finished.
-  static const String gestured = 'gestured';
-
-  /// The event confirming a reset.
-  static const String resetDone = 'reset_done';
-
-  /// The event announcing that demo playback started.
-  static const String demoStarted = 'demo_started';
-
-  /// The event announcing that demo playback finished.
-  static const String demoEnded = 'demo_ended';
-
-  /// The event announcing an mp4 payload.
-  static const String video = 'video';
-
-  /// The event reporting a command failure.
-  static const String error = 'error';
-}
 
 /// A command received from the screenshot tool.
 sealed class ToolCommand {
@@ -70,6 +22,11 @@ sealed class ToolCommand {
       ProtocolNames.setTheme => SetThemeCommand.fromJson(json),
       ProtocolNames.screenshot => ScreenshotCommand.fromJson(json),
       ProtocolNames.gesture => GestureCommand.fromJson(json),
+      ProtocolNames.readText => InputCommand.fromJson(json),
+      ProtocolNames.tapText => InputCommand.fromJson(json),
+      ProtocolNames.tapKey => InputCommand.fromJson(json),
+      ProtocolNames.typeText => InputCommand.fromJson(json),
+      ProtocolNames.pressKey => InputCommand.fromJson(json),
       ProtocolNames.reset => ResetCommand.fromJson(json),
       _ => throw FormatException('unknown tool command: ${json['command']}'),
     };
@@ -263,6 +220,19 @@ final class GestureCommand extends LiveCommand {
 
   /// Validated gesture details.
   final LiveGesture gesture;
+}
+
+/// A live-session command that reads or acts on visible app input.
+final class InputCommand extends LiveCommand {
+  /// Creates an input command wrapping [input].
+  const InputCommand(this.input);
+
+  /// Parses a live input command from the tool's JSON object.
+  factory InputCommand.fromJson(Map<String, dynamic> json) =>
+      InputCommand(LiveInput.fromJson(json));
+
+  /// Validated input request.
+  final LiveInput input;
 }
 
 /// Restores the app to its initial state.

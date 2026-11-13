@@ -50,7 +50,8 @@ class StepExecutor {
           await _delay(screenshotSettleMs);
           onStill(step.name, await still.capture(pixelRatio));
         case CustomStep():
-          final action = actions[step.name] ??
+          final action =
+              actions[step.name] ??
               (throw StateError('no custom action named "${step.name}"'));
           await action();
       }
@@ -71,19 +72,19 @@ class StepExecutor {
     await _delay(defaultCharDelayMs);
   }
 
-  /// Appends [text] to the focused text field, one char per [charDelayMs].
-  Future<void> typeText(String text,
-      {int charDelayMs = defaultCharDelayMs}) async {
+  /// Types [text] at the focused text field's current selection.
+  Future<void> typeText(
+    String text, {
+    int charDelayMs = defaultCharDelayMs,
+  }) async {
     final state = FocusManager.instance.primaryFocus?.context
         ?.findAncestorStateOfType<EditableTextState>();
     if (state == null) throw StateError('type_text: no text field has focus');
     for (final rune in text.runes) {
-      final current = state.textEditingValue.text;
-      final next = current + String.fromCharCode(rune);
       state.userUpdateTextEditingValue(
-        TextEditingValue(
-          text: next,
-          selection: TextSelection.collapsed(offset: next.length),
+        state.textEditingValue.replaced(
+          state.textEditingValue.selection,
+          String.fromCharCode(rune),
         ),
         SelectionChangedCause.keyboard,
       );
@@ -107,5 +108,6 @@ class StepExecutor {
     return found ?? (throw StateError('no widget with ValueKey("$key")'));
   }
 
-  Future<void> _delay(int ms) => Future<void>.delayed(Duration(milliseconds: ms));
+  Future<void> _delay(int ms) =>
+      Future<void>.delayed(Duration(milliseconds: ms));
 }
