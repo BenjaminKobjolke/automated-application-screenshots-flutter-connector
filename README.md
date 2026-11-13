@@ -121,6 +121,9 @@ The `gesture` command performs a tap, one-finger drag or two-finger pinch on the
 current view. See [docs/LIVE_SCREENS.md](docs/LIVE_SCREENS.md#gestures) for its
 wire fields, defaults and section targeting.
 
+Live input also supports `read_text`, `tap_text`, `tap_key`, `type_text` and
+`press_key`; see [Reading and acting on text](docs/LIVE_SCREENS.md#reading-and-acting-on-text).
+
 Live screen capture also works with the Windows desktop target using
 `flutter run -d windows`; it captures the Flutter view in-app and does not use
 the Android screen-recording plugin. Live mode is debug-only and stills-only.

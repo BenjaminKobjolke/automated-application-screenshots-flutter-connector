@@ -133,6 +133,55 @@ missing screen or section also returns `error`. The connector replies with
 `gestured` after Flutter's gesture handling and the resulting frame settle. Send
 a `screenshot` command afterwards to capture the changed view.
 
+## Reading and acting on text
+
+These debug-only commands let a connected tool inspect the current app view and
+interact with its visible controls. They run inside Flutter; they do not send
+input to the operating system.
+
+| Command | Reply |
+| --- | --- |
+| `{"command":"read_text"}` | `{"event":"visible_text","entries":[{"text":"Sign in","kind":"button","enabled":true,"bounds":[0.1,0.8,0.9,0.86]},{"text":"me@x.de","kind":"text_field","enabled":true,"bounds":[0.1,0.3,0.9,0.38],"label":"Email","hint":"you@example.com","value":"me@x.de"}]}` |
+| `{"command":"tap_text","text":"Sign in"}` | `{"event":"text_tapped","text":"Sign in"}` |
+| `{"command":"tap_text","text":"Save","match":"contains","index":1}` | `{"event":"text_tapped","text":"Save"}` |
+| `{"command":"tap_key","key":"login_button"}` | `{"event":"key_tapped","key":"login_button"}` |
+| `{"command":"type_text","text":"me@x.de","field":"Email"}` | `{"event":"text_typed","text":"me@x.de"}` |
+| `{"command":"press_key","key":"shift_tab"}` | `{"event":"key_pressed","key":"shift_tab"}` |
+
+`read_text` returns entries in reading order, top to bottom and left to right.
+Each `bounds` value is `[left, top, right, bottom]` as fractions of the app
+view. `kind` is `text`, `button` (including links and other tappable controls),
+or `text_field`. Every entry includes `enabled`. Text-field entries may also
+include non-empty `label`, `hint` and `value`; their `text` is the current value
+or, when empty, the field label. Text hidden behind a modal route or scrolled
+outside the view is omitted.
+
+The reader uses Flutter semantics. Custom widgets must expose semantics for
+their text to appear; text drawn without semantics cannot be read. A plain text
+entry can also be tapped at its centre when no tappable match exists for the
+requested text.
+
+`tap_text` uses an exact match by default. Set `match` to `contains` for a
+substring match. Matching checks entry text and, for text fields, their label
+and hint. Use the optional zero-based `index` to choose among multiple matches.
+Without it, no match and ambiguous matches return an `error` with visible
+candidates; an ambiguous error asks for an index. Only buttons and text fields
+are preferred as targets when a tappable match exists.
+
+`tap_key` taps a widget with the matching `ValueKey<String>`. `type_text` types
+into the focused field; its optional `field` selects and focuses a text field by
+an exact label or hint match first. A missing or ambiguous field selection
+returns an `error` listing the available fields.
+
+`press_key` accepts `enter`, `tab`, `shift_tab`, `escape`, `backspace`,
+`arrow_up`, `arrow_down`, `arrow_left` and `arrow_right`. Enter performs the
+focused text field's submit action, or inserts a newline in a multiline field.
+Escape dismisses the current route when the app does not handle it. Each
+successful command gets the event shown above; failures use the existing
+`{"event":"error","message":"..."}` reply and leave the connection usable.
+
+Try `read_text` and `tap_text` during the Windows live setup check.
+
 ## Record ids
 
 `navigate.record_id` must be a JSON integer. A record id sent to a screen without
