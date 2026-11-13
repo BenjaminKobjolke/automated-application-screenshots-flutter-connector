@@ -18,7 +18,7 @@
       "test": "green"
     },
     "tools\\run_integration_tests.bat": {
-      "test": "green"
+      "test": "failed"
     },
     "tools\\analyze_changed_and_new_files.bat": {
       "code_quality": "green"
@@ -46,5 +46,10 @@
     "tests": true
   },
   "analysis_code_quality_answered": true,
-  "project_id": 12316
+  "project_id": 12316,
+  "analysis_command_failing_tests": {
+    "tools\\run_integration_tests.bat": [
+      "live commands open named screens and capture a PNG"
+    ]
+  }
 }
