@@ -13,6 +13,8 @@ import 'dart:convert';
 
 const _projectMediaOp = 'PROJECT_MEDIA';
 const _allowAppOpMode = 'allow';
+const _immersiveModeConfirmations = 'immersive_mode_confirmations';
+const _confirmed = 'confirmed';
 
 /// Serial of an attached device, and whether it is ready to be used.
 class AdbDevice {
@@ -88,8 +90,8 @@ bool isPackageInstalled(String pmPathOutput) => const LineSplitter()
     .convert(pmPathOutput)
     .any((line) => line.trim().startsWith('package:'));
 
-/// Whether an `appops set` invocation succeeded without diagnostic output.
-bool appOpsSetSucceeded(int exitCode, String output) =>
+/// Whether an adb command succeeded without diagnostic output.
+bool adbCommandSucceeded(int exitCode, String output) =>
     exitCode == 0 && output.trim().isEmpty;
 
 /// Builds the `appops set` arguments that grant screen capture consent.
@@ -99,6 +101,18 @@ List<String> appOpsGrantArgs(String packageName) => [
   packageName,
   _projectMediaOp,
   _allowAppOpMode,
+];
+
+/// Builds the setting arguments that mark Android's immersive notice as seen.
+///
+/// Without this confirmation, entering immersive mode at recording start shows
+/// Android's one-time "Viewing full screen" notice over the video.
+List<String> immersiveConfirmArgs() => [
+  'settings',
+  'put',
+  'secure',
+  _immersiveModeConfirmations,
+  _confirmed,
 ];
 
 /// Builds a bounded device shell loop that grants consent after installation.

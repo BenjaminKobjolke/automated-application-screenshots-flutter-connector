@@ -142,12 +142,12 @@ void main() {
     });
   });
 
-  group('appOpsSetSucceeded', () {
+  group('adbCommandSucceeded', () {
     test('requires a zero exit code and no output', () {
-      expect(appOpsSetSucceeded(0, ''), isTrue);
-      expect(appOpsSetSucceeded(0, '  \n'), isTrue);
-      expect(appOpsSetSucceeded(0, 'Error: No UID for x in user 0\n'), isFalse);
-      expect(appOpsSetSucceeded(255, ''), isFalse);
+      expect(adbCommandSucceeded(0, ''), isTrue);
+      expect(adbCommandSucceeded(0, '  \n'), isTrue);
+      expect(adbCommandSucceeded(0, 'Error: No UID for x in user 0\n'), isFalse);
+      expect(adbCommandSucceeded(255, ''), isFalse);
     });
   });
 
@@ -158,6 +158,16 @@ void main() {
       'de.x.y',
       'PROJECT_MEDIA',
       'allow',
+    ]);
+  });
+
+  test('immersiveConfirmArgs builds the confirmation setting arguments', () {
+    expect(immersiveConfirmArgs(), [
+      'settings',
+      'put',
+      'secure',
+      'immersive_mode_confirmations',
+      'confirmed',
     ]);
   });
 

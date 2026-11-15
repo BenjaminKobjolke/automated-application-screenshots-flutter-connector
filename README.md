@@ -144,6 +144,8 @@ nothing usable is attached, then waits for `sys.boot_completed` (up to 180 s).
 It also pre-grants screen capture on every ready device. If the app is not
 installed yet, a device-side watcher grants it after `flutter run` installs the
 app (up to 20 minutes). Exit code 0 means a device is ready.
+It also pre-confirms Android's "Viewing full screen" notice on every ready device
+so video demos start without it; manually set it with `adb shell settings put secure immersive_mode_confirmations confirmed`, or undo that with `adb shell settings delete secure immersive_mode_confirmations`.
 
 | variable | effect |
 |---|---|

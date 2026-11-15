@@ -18,6 +18,8 @@
 /// Once a device is ready, this pre-grants `PROJECT_MEDIA` for the app package.
 /// If the app is not installed yet, a detached device-side watcher grants it
 /// after `flutter run` installs the app.
+/// It also pre-confirms Android's one-time immersive-mode notice on each ready
+/// device so video demos do not start with the "Viewing full screen" overlay.
 ///
 /// Exit code 0 means a booted device is ready.
 ///
@@ -29,15 +31,13 @@ library;
 
 import 'dart:io';
 
+import 'device_capture_grant.dart';
+
 import 'package:automated_screenshot_connector/src/host/device_bootstrap.dart';
 
 const Duration _bootTimeout = Duration(seconds: 180);
 
 const Duration _pollInterval = Duration(seconds: 2);
-
-const Duration _installWatchTimeout = Duration(minutes: 20);
-
-const Duration _installPollInterval = Duration(seconds: 1);
 
 const _demoPackageEnvironment = 'DEMO_PACKAGE';
 const _demoEmulatorEnvironment = 'DEMO_EMULATOR';
@@ -64,10 +64,13 @@ Future<int> _main() async {
       'ensure_device: using ${ready.first.serial}'
       '${ready.length > 1 ? ' (${ready.length} attached)' : ''}',
     );
+    for (final device in ready) {
+      await _confirmImmersiveNotice(device.serial);
+    }
     final packageName = _resolvePackage();
     if (packageName != null) {
       for (final device in ready) {
-        await _grantCapture(packageName, device.serial);
+        await grantCaptureForDevice(packageName, device.serial, run: _run);
       }
     }
     return 0;
@@ -92,8 +95,11 @@ Future<int> _main() async {
   final serial = await _waitForBoot();
   if (serial == null) return 1;
   if (serial.isNotEmpty) {
+    await _confirmImmersiveNotice(serial);
     final packageName = _resolvePackage();
-    if (packageName != null) await _grantCapture(packageName, serial);
+    if (packageName != null) {
+      await grantCaptureForDevice(packageName, serial, run: _run);
+    }
   }
   return 0;
 }
@@ -164,63 +170,34 @@ String? _readApplicationId() {
   return null;
 }
 
-Future<void> _grantCapture(String packageName, String serial) async {
-  final package = await _run('adb', [
-    '-s',
-    serial,
-    'shell',
-    'pm',
-    'path',
-    packageName,
-  ]);
-  if (!isPackageInstalled(package.stdout.toString())) {
-    try {
-      // Keep the device shell syntax off the Windows host shell.
-      await Process.start('adb', [
-        '-s',
-        serial,
-        'shell',
-        grantWhenInstalledScript(
-          packageName,
-          attempts:
-              _installWatchTimeout.inSeconds ~/ _installPollInterval.inSeconds,
-          interval: _installPollInterval,
-        ),
-      ], mode: ProcessStartMode.detached);
-      stdout.writeln(
-        'ensure_device: $packageName is not installed on $serial '
-        'yet; screen capture will be granted in the background once '
-        'flutter run installs it (watching up to '
-        '${_installWatchTimeout.inMinutes} min).',
-      );
-    } on ProcessException catch (error) {
-      stdout.writeln(
-        'ensure_device: could not start screen-capture watcher '
-        'for $packageName on $serial ($error); video demos will ask.',
-      );
-    }
+Future<void> _confirmImmersiveNotice(String serial) async {
+  late final ProcessResult result;
+  try {
+    result = await _run('adb', [
+      '-s',
+      serial,
+      'shell',
+      ...immersiveConfirmArgs(),
+    ]);
+  } on ProcessException catch (error) {
+    stdout.writeln(
+      'ensure_device: could not pre-confirm the full-screen notice on '
+      '$serial ($error); videos may show it.',
+    );
     return;
   }
-
-  final grant = await _run('adb', [
-    '-s',
-    serial,
-    'shell',
-    ...appOpsGrantArgs(packageName),
-  ]);
-  final output = '${grant.stdout}${grant.stderr}';
-  if (appOpsSetSucceeded(grant.exitCode, output)) {
+  final output = '${result.stdout}${result.stderr}';
+  if (adbCommandSucceeded(result.exitCode, output)) {
     stdout.writeln(
-      'ensure_device: screen capture pre-granted for '
-      '$packageName on $serial',
+      'ensure_device: full-screen notice pre-confirmed on $serial',
     );
   } else {
     final details = output.trim().isEmpty
-        ? 'exit code ${grant.exitCode}'
+        ? 'exit code ${result.exitCode}'
         : output.trim();
     stdout.writeln(
-      'ensure_device: could not pre-grant screen capture for '
-      '$packageName on $serial ($details); video demos will ask.',
+      'ensure_device: could not pre-confirm the full-screen notice on '
+      '$serial ($details); videos may show it.',
     );
   }
 }
