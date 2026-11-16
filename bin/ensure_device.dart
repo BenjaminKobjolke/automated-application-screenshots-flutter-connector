@@ -33,7 +33,7 @@ import 'dart:io';
 
 import 'device_capture_grant.dart';
 
-import 'package:automated_screenshot_connector/src/host/device_bootstrap.dart';
+import 'src/host/device_bootstrap.dart';
 
 const Duration _bootTimeout = Duration(seconds: 180);
 
@@ -58,7 +58,8 @@ Future<int> _main() async {
   // of the `adb devices` output we parse.
   await _run('adb', ['start-server']);
 
-  final ready = await _readyDevices();
+  final attachedDevices = await _adbDevices();
+  final ready = _readyDevices(attachedDevices);
   if (ready.isNotEmpty) {
     stdout.writeln(
       'ensure_device: using ${ready.first.serial}'
@@ -79,6 +80,9 @@ Future<int> _main() async {
   final avd = await _resolveAvd();
   if (avd == null) return 1;
 
+  final existingSerials = (await _adbDevices())
+      .map((device) => device.serial)
+      .toSet();
   stdout.writeln('ensure_device: no device attached, launching $avd');
   final launch = await _run(_flutter.executable, [
     ..._flutter.leadingArgs,
@@ -92,7 +96,7 @@ Future<int> _main() async {
     return 1;
   }
 
-  final serial = await _waitForBoot();
+  final serial = await _waitForBoot(existingSerials);
   if (serial == null) return 1;
   if (serial.isNotEmpty) {
     await _confirmImmersiveNotice(serial);
@@ -105,23 +109,28 @@ Future<int> _main() async {
 }
 
 /// Blocks until a device reports `sys.boot_completed`, or [_bootTimeout] pass.
-Future<String?> _waitForBoot() async {
-  await _run('adb', ['wait-for-device']);
+Future<String?> _waitForBoot(Set<String> existingSerials) async {
   final deadline = DateTime.now().add(_bootTimeout);
+  String? serial;
   while (DateTime.now().isBefore(deadline)) {
+    if (serial == null) {
+      final devices = await _adbDevices();
+      serial = findNewEmulatorSerial(devices, existingSerials);
+      if (serial == null) {
+        await Future<void>.delayed(_pollInterval);
+        continue;
+      }
+      await _run('adb', ['-s', serial, 'wait-for-device']);
+    }
     final booted = await _run('adb', [
+      '-s',
+      serial,
       'shell',
       'getprop',
       'sys.boot_completed',
     ]);
     if (booted.stdout.toString().trim() == '1') {
-      final ready = await _readyDevices();
-      final serial = ready.isEmpty ? '' : ready.first.serial;
-      stdout.writeln(
-        serial.isEmpty
-            ? 'ensure_device: device booted'
-            : 'ensure_device: $serial booted',
-      );
+      stdout.writeln('ensure_device: $serial booted');
       return serial;
     }
     await Future<void>.delayed(_pollInterval);
@@ -222,9 +231,12 @@ Future<String?> _resolveAvd() async {
 }
 
 /// Devices adb can actually talk to, reporting any that are attached but not.
-Future<List<AdbDevice>> _readyDevices() async {
+Future<List<AdbDevice>> _adbDevices() async {
   final listed = await _run('adb', ['devices']);
-  final devices = parseAdbDevices(listed.stdout.toString());
+  return parseAdbDevices(listed.stdout.toString());
+}
+
+List<AdbDevice> _readyDevices(List<AdbDevice> devices) {
   for (final device in devices.where((d) => !d.isReady)) {
     stdout.writeln(
       'ensure_device: ignoring ${device.serial} (${device.state})',

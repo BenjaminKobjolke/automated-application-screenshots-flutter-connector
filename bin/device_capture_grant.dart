@@ -3,7 +3,7 @@ library;
 
 import 'dart:io';
 
-import 'package:automated_screenshot_connector/src/host/device_bootstrap.dart';
+import 'src/host/device_bootstrap.dart';
 
 const Duration _installWatchTimeout = Duration(minutes: 20);
 const Duration _installPollInterval = Duration(seconds: 1);

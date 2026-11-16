@@ -50,6 +50,20 @@ List<AdbDevice> parseAdbDevices(String stdout) {
   return devices;
 }
 
+/// Finds an emulator serial that was not attached before an emulator launch.
+String? findNewEmulatorSerial(
+  List<AdbDevice> devices,
+  Set<String> existingSerials,
+) {
+  for (final device in devices) {
+    if (device.serial.startsWith('emulator-') &&
+        !existingSerials.contains(device.serial)) {
+      return device.serial;
+    }
+  }
+  return null;
+}
+
 /// Parses `flutter emulators` output into the emulator ids it lists.
 ///
 /// The table rows are `id • name • manufacturer • platform`; everything before

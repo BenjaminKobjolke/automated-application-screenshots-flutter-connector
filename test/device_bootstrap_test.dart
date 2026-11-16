@@ -1,4 +1,5 @@
-import 'package:automated_screenshot_connector/src/host/device_bootstrap.dart';
+import '../bin/src/host/device_bootstrap.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -40,6 +41,31 @@ void main() {
       'List of devices attached\n',
     );
     expect(devices, isEmpty);
+  });
+
+  group('findNewEmulatorSerial', () {
+    test('returns an emulator that appeared after launch', () {
+      final devices = parseAdbDevices(
+        'List of devices attached\n'
+        'R58M20ABCDE\tdevice\n'
+        'emulator-5556\toffline\n',
+      );
+
+      expect(
+        findNewEmulatorSerial(devices, {'R58M20ABCDE', 'emulator-5554'}),
+        'emulator-5556',
+      );
+    });
+
+    test('ignores existing emulators and non-emulator devices', () {
+      final devices = parseAdbDevices(
+        'List of devices attached\n'
+        'emulator-5554\tdevice\n'
+        'R58M20ABCDE\tdevice\n',
+      );
+
+      expect(findNewEmulatorSerial(devices, {'emulator-5554'}), isNull);
+    });
   });
 
   test('parseEmulatorIds reads the ids out of the table', () {
@@ -146,7 +172,10 @@ void main() {
     test('requires a zero exit code and no output', () {
       expect(adbCommandSucceeded(0, ''), isTrue);
       expect(adbCommandSucceeded(0, '  \n'), isTrue);
-      expect(adbCommandSucceeded(0, 'Error: No UID for x in user 0\n'), isFalse);
+      expect(
+        adbCommandSucceeded(0, 'Error: No UID for x in user 0\n'),
+        isFalse,
+      );
       expect(adbCommandSucceeded(255, ''), isFalse);
     });
   });
