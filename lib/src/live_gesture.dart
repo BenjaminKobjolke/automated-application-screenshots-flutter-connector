@@ -1,5 +1,6 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
+
+export 'gesture_driver.dart';
 
 /// A touch gesture supported by the live screenshot protocol.
 enum GestureKind {
@@ -46,60 +47,34 @@ final class LiveGesture {
   /// Parses and validates a `gesture` command object.
   factory LiveGesture.fromJson(Map<String, dynamic> json) {
     final kind = GestureKind.parse(json[_GestureJsonKeys.kind]);
-    final durationMs = json[_GestureJsonKeys.durationMs];
-    final defaultDuration = kind == GestureKind.tap
-        ? _GestureJsonValues.defaultTapDurationMs
-        : _GestureJsonValues.defaultDurationMs;
-    if (durationMs != null && (durationMs is! int || durationMs <= 0)) {
-      throw FormatException('duration_ms must be a positive integer');
-    }
-
-    final at = kind == GestureKind.tap
-        ? _point(json[_GestureJsonKeys.at], _GestureJsonKeys.at)
-        : null;
-    final from = kind == GestureKind.drag
-        ? _point(json[_GestureJsonKeys.from], _GestureJsonKeys.from)
-        : null;
-    final to = kind == GestureKind.drag
-        ? _point(json[_GestureJsonKeys.to], _GestureJsonKeys.to)
-        : null;
-    final center = kind == GestureKind.pinch
-        ? _point(json[_GestureJsonKeys.center], _GestureJsonKeys.center)
-        : null;
-    final rawScale = json[_GestureJsonKeys.scale];
-    double? scale;
-    if (kind == GestureKind.pinch) {
-      if (rawScale is! num) {
-        throw FormatException('pinch scale must be a positive number');
-      }
-      scale = rawScale.toDouble();
-      if (!scale.isFinite || scale <= 0) {
-        throw FormatException('pinch scale must be a positive number');
-      }
-    }
-
-    final rawScreen = json[_GestureJsonKeys.screen];
-    final rawSection = json[_GestureJsonKeys.section];
-    if (rawScreen != null && rawScreen is! String) {
-      throw FormatException('screen must be a string');
-    }
-    if (rawSection != null && rawSection is! String) {
-      throw FormatException('section must be a string');
-    }
-    if (rawSection != null && rawScreen == null) {
-      throw FormatException('section requires screen');
-    }
+    final durationMs = _gestureDurationMs(json, kind);
+    final at = _gesturePoint(json, kind, GestureKind.tap, _GestureJsonKeys.at);
+    final from = _gesturePoint(
+      json,
+      kind,
+      GestureKind.drag,
+      _GestureJsonKeys.from,
+    );
+    final to = _gesturePoint(json, kind, GestureKind.drag, _GestureJsonKeys.to);
+    final center = _gesturePoint(
+      json,
+      kind,
+      GestureKind.pinch,
+      _GestureJsonKeys.center,
+    );
+    final scale = _gestureScale(json, kind);
+    final target = _gestureTarget(json);
 
     return LiveGesture(
       kind: kind,
-      duration: Duration(milliseconds: durationMs as int? ?? defaultDuration),
+      duration: Duration(milliseconds: durationMs),
       at: at,
       from: from,
       to: to,
       center: center,
       scale: scale,
-      screen: rawScreen as String?,
-      section: rawSection as String?,
+      screen: target.screen,
+      section: target.section,
     );
   }
 
@@ -131,146 +106,73 @@ final class LiveGesture {
   final String? section;
 
   static Offset _point(Object? raw, String name) {
-    if (raw is! List || raw.length != _GestureJsonValues.pointLength) {
+    if (!_hasPointShape(raw)) {
       throw FormatException('$name must be a two-number point');
     }
-    final x = raw[0];
-    final y = raw[1];
+    final coordinates = raw as List;
+    final x = coordinates[0];
+    final y = coordinates[1];
     if (x is! num || y is! num) {
       throw FormatException('$name must be a two-number point');
     }
     final point = Offset(x.toDouble(), y.toDouble());
-    if (!point.dx.isFinite ||
-        !point.dy.isFinite ||
-        point.dx < 0 ||
-        point.dx > 1 ||
-        point.dy < 0 ||
-        point.dy > 1) {
+    if (!_isUnitCoordinate(point.dx) || !_isUnitCoordinate(point.dy)) {
       throw FormatException('$name coordinates must be between 0 and 1');
     }
     return point;
   }
+
+  static bool _hasPointShape(Object? raw) =>
+      raw is List && raw.length == _GestureJsonValues.pointLength;
+
+  static bool _isUnitCoordinate(double value) =>
+      value.isFinite && value >= 0 && value <= 1;
 }
 
-/// Sends touch pointer events through Flutter's normal gesture recognizers.
-final class GestureDriver {
-  static const Duration _moveInterval = Duration(milliseconds: 16);
-  static const Duration _settleHold = Duration(milliseconds: 60);
-  static const double _pinchRadiusFraction = 0.2;
-  static final Stopwatch _eventClock = Stopwatch()..start();
-  static int _nextPointer = 1;
-
-  /// Performs [gesture] relative to the global-coordinate [box].
-  Future<void> perform(LiveGesture gesture, Rect box) async {
-    if (box.isEmpty || !box.width.isFinite || !box.height.isFinite) {
-      throw StateError('gesture target has no finite size');
-    }
-    switch (gesture.kind) {
-      case GestureKind.tap:
-        await _tap(_position(box, gesture.at!), gesture.duration);
-      case GestureKind.drag:
-        await _drag(
-          _position(box, gesture.from!),
-          _position(box, gesture.to!),
-          gesture.duration,
-        );
-      case GestureKind.pinch:
-        await _pinch(
-          box,
-          _position(box, gesture.center!),
-          gesture.scale!,
-          gesture.duration,
-        );
-    }
+int _gestureDurationMs(Map<String, dynamic> json, GestureKind kind) {
+  final durationMs = json[_GestureJsonKeys.durationMs];
+  if (durationMs != null && (durationMs is! int || durationMs <= 0)) {
+    throw FormatException('duration_ms must be a positive integer');
   }
+  if (durationMs is int) return durationMs;
+  return kind == GestureKind.tap
+      ? _GestureJsonValues.defaultTapDurationMs
+      : _GestureJsonValues.defaultDurationMs;
+}
 
-  Future<void> _tap(Offset point, Duration duration) async {
-    final pointer = _allocatePointer();
-    _send(PointerDownEvent(pointer: pointer, position: point));
-    await Future<void>.delayed(duration);
-    _send(PointerUpEvent(pointer: pointer, position: point));
+Offset? _gesturePoint(
+  Map<String, dynamic> json,
+  GestureKind kind,
+  GestureKind expectedKind,
+  String field,
+) => kind == expectedKind ? LiveGesture._point(json[field], field) : null;
+
+double? _gestureScale(Map<String, dynamic> json, GestureKind kind) {
+  if (kind != GestureKind.pinch) return null;
+  final rawScale = json[_GestureJsonKeys.scale];
+  if (rawScale is! num) {
+    throw FormatException('pinch scale must be a positive number');
   }
-
-  Future<void> _drag(Offset start, Offset end, Duration duration) async {
-    final pointer = _allocatePointer();
-    _send(PointerDownEvent(pointer: pointer, position: start));
-    await _movePointers(
-      duration,
-      (progress) => _send(
-        PointerMoveEvent(
-          pointer: pointer,
-          position: Offset.lerp(start, end, progress)!,
-        ),
-      ),
-    );
-    await Future<void>.delayed(_settleHold);
-    _send(PointerUpEvent(pointer: pointer, position: end));
+  final scale = rawScale.toDouble();
+  if (!scale.isFinite || scale <= 0) {
+    throw FormatException('pinch scale must be a positive number');
   }
+  return scale;
+}
 
-  Future<void> _pinch(
-    Rect box,
-    Offset center,
-    double scale,
-    Duration duration,
-  ) async {
-    final radius = box.shortestSide * _pinchRadiusFraction;
-    final startLeft = center - Offset(radius, 0);
-    final startRight = center + Offset(radius, 0);
-    final endLeft = center - Offset(radius * scale, 0);
-    final endRight = center + Offset(radius * scale, 0);
-    final leftPointer = _allocatePointer();
-    final rightPointer = _allocatePointer();
-    _send(PointerDownEvent(pointer: leftPointer, position: startLeft));
-    _send(PointerDownEvent(pointer: rightPointer, position: startRight));
-    await _movePointers(duration, (progress) {
-      _send(
-        PointerMoveEvent(
-          pointer: leftPointer,
-          position: Offset.lerp(startLeft, endLeft, progress)!,
-        ),
-      );
-      _send(
-        PointerMoveEvent(
-          pointer: rightPointer,
-          position: Offset.lerp(startRight, endRight, progress)!,
-        ),
-      );
-    });
-    await Future<void>.delayed(_settleHold);
-    _send(PointerUpEvent(pointer: leftPointer, position: endLeft));
-    _send(PointerUpEvent(pointer: rightPointer, position: endRight));
+({String? screen, String? section}) _gestureTarget(Map<String, dynamic> json) {
+  final screen = json[_GestureJsonKeys.screen];
+  final section = json[_GestureJsonKeys.section];
+  if (screen != null && screen is! String) {
+    throw FormatException('screen must be a string');
   }
-
-  Future<void> _movePointers(
-    Duration duration,
-    void Function(double progress) move,
-  ) async {
-    final durationMs = duration.inMilliseconds;
-    final steps = (durationMs / _moveInterval.inMilliseconds).ceil();
-    var previousMs = 0;
-    for (var step = 1; step <= steps; step++) {
-      final currentMs = (durationMs * step / steps).round();
-      await Future<void>.delayed(
-        Duration(milliseconds: currentMs - previousMs),
-      );
-      move(step / steps);
-      previousMs = currentMs;
-    }
+  if (section != null && section is! String) {
+    throw FormatException('section must be a string');
   }
-
-  static Offset _position(Rect box, Offset fraction) =>
-      box.topLeft + Offset(fraction.dx * box.width, fraction.dy * box.height);
-
-  static int _allocatePointer() => _nextPointer++;
-
-  static void _send(PointerEvent event) {
-    GestureBinding.instance.handlePointerEvent(
-      event.copyWith(
-        kind: PointerDeviceKind.touch,
-        timeStamp: _eventClock.elapsed,
-      ),
-    );
+  if (section != null && screen == null) {
+    throw FormatException('section requires screen');
   }
+  return (screen: screen as String?, section: section as String?);
 }
 
 abstract final class _GestureJsonKeys {

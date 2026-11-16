@@ -106,70 +106,98 @@ final class VisibleTextReader {
 
   /// Reads entries in top-to-bottom, then left-to-right order.
   List<VisibleTextEntry> read(Rect view, {required double devicePixelRatio}) {
-    if (view.isEmpty ||
-        !view.isFinite ||
-        !devicePixelRatio.isFinite ||
-        devicePixelRatio <= 0) {
-      return const [];
-    }
+    if (!_hasValidViewport(view, devicePixelRatio)) return const [];
 
     final root = _findRoot(view, devicePixelRatio);
     if (root == null) return const [];
 
     final entries = <VisibleTextEntry>[];
-    void visit(SemanticsNode node, Matrix4 parentTransform) {
-      if (node.isInvisible) return;
-
-      final transform = Matrix4.copy(parentTransform);
-      if (node.transform case final nodeTransform?) {
-        transform.multiply(nodeTransform);
-      }
-      final data = node.getSemanticsData();
-      if (!data.flagsCollection.isHidden) {
-        final physicalRect = MatrixUtils.transformRect(transform, node.rect);
-        final rect = Rect.fromLTRB(
-          physicalRect.left / devicePixelRatio,
-          physicalRect.top / devicePixelRatio,
-          physicalRect.right / devicePixelRatio,
-          physicalRect.bottom / devicePixelRatio,
-        );
-        if (rect.overlaps(view)) {
-          final isTextField = data.flagsCollection.isTextField;
-          final label = data.label;
-          final value = data.value;
-          final text = isTextField ? (value.isNotEmpty ? value : label) : label;
-          if (text.isNotEmpty || isTextField) {
-            entries.add(
-              VisibleTextEntry(
-                text: text,
-                kind: isTextField
-                    ? VisibleTextKind.textField
-                    : data.hasAction(SemanticsAction.tap)
-                    ? VisibleTextKind.button
-                    : VisibleTextKind.text,
-                enabled: data.flagsCollection.isEnabled != Tristate.isFalse,
-                rect: rect,
-                view: view,
-                label: isTextField ? label : null,
-                hint: isTextField ? data.hint : null,
-                value: isTextField ? value : null,
-              ),
-            );
-          }
-        }
-      }
-
-      if (!node.mergeAllDescendantsIntoThisNode) {
-        node.visitChildren((child) {
-          visit(child, transform);
-          return true;
-        });
-      }
-    }
-
-    visit(root, Matrix4.identity());
+    _visitNode(root, Matrix4.identity(), view, devicePixelRatio, entries);
     return _readingOrder(entries);
   }
+
+  void _visitNode(
+    SemanticsNode node,
+    Matrix4 parentTransform,
+    Rect view,
+    double devicePixelRatio,
+    List<VisibleTextEntry> entries,
+  ) {
+    if (node.isInvisible) return;
+
+    final transform = Matrix4.copy(parentTransform);
+    if (node.transform case final nodeTransform?) {
+      transform.multiply(nodeTransform);
+    }
+    final entry = _entryForNode(node, transform, view, devicePixelRatio);
+    if (entry != null) entries.add(entry);
+
+    if (!node.mergeAllDescendantsIntoThisNode) {
+      node.visitChildren((child) {
+        _visitNode(child, transform, view, devicePixelRatio, entries);
+        return true;
+      });
+    }
+  }
+
+  VisibleTextEntry? _entryForNode(
+    SemanticsNode node,
+    Matrix4 transform,
+    Rect view,
+    double devicePixelRatio,
+  ) {
+    final data = node.getSemanticsData();
+    if (data.flagsCollection.isHidden) return null;
+
+    final physicalRect = MatrixUtils.transformRect(transform, node.rect);
+    final rect = Rect.fromLTRB(
+      physicalRect.left / devicePixelRatio,
+      physicalRect.top / devicePixelRatio,
+      physicalRect.right / devicePixelRatio,
+      physicalRect.bottom / devicePixelRatio,
+    );
+    if (!rect.overlaps(view)) return null;
+
+    return _entryForVisibleData(data, rect, view);
+  }
+
+  VisibleTextEntry? _entryForVisibleData(
+    SemanticsData data,
+    Rect rect,
+    Rect view,
+  ) {
+    final isTextField = data.flagsCollection.isTextField;
+    final label = data.label;
+    final value = data.value;
+    final text = _visibleText(isTextField, label, value);
+    if (text.isEmpty && !isTextField) return null;
+
+    return VisibleTextEntry(
+      text: text,
+      kind: _visibleTextKind(data, isTextField),
+      enabled: data.flagsCollection.isEnabled != Tristate.isFalse,
+      rect: rect,
+      view: view,
+      label: isTextField ? label : null,
+      hint: isTextField ? data.hint : null,
+      value: isTextField ? value : null,
+    );
+  }
+
+  String _visibleText(bool isTextField, String label, String value) =>
+      isTextField && value.isNotEmpty ? value : label;
+
+  VisibleTextKind _visibleTextKind(SemanticsData data, bool isTextField) {
+    if (isTextField) return VisibleTextKind.textField;
+    if (data.hasAction(SemanticsAction.tap)) return VisibleTextKind.button;
+    return VisibleTextKind.text;
+  }
+
+  bool _hasValidViewport(Rect view, double devicePixelRatio) =>
+      !view.isEmpty &&
+      view.isFinite &&
+      devicePixelRatio.isFinite &&
+      devicePixelRatio > 0;
 
   SemanticsNode? _findRoot(Rect view, double devicePixelRatio) {
     SemanticsNode? bestRoot;
