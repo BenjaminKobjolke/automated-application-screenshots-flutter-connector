@@ -117,6 +117,48 @@ void main() {
     });
   });
 
+  testWidgets('connection remains usable after pause and resume', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      final server = await bindLoopback();
+      final accepted = server.first;
+      await tester.pumpWidget(
+        AutomationDemoHost(
+          host: '$loopbackHost:${server.port}',
+          registry: DemoRegistry(),
+          screens: LiveScreenRegistry(),
+          child: const MaterialApp(home: Scaffold(body: Text('Ready'))),
+        ),
+      );
+      final connection = await accepted;
+      addTearDown(() => _restoreResumedLifecycle(tester));
+
+      expect(
+        await sendAndRead(tester, connection, {'command': 'list_screens'}),
+        {'event': 'screens', 'screens': []},
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      _restoreResumedLifecycle(tester);
+
+      final screenshot = await sendAndRead(tester, connection, {
+        'command': 'screenshot',
+        'name': 'ready',
+      });
+      expect(screenshot['event'], 'screenshot');
+      expect(
+        await sendAndRead(tester, connection, {'command': 'list_screens'}),
+        {'event': 'screens', 'screens': []},
+      );
+
+      await connection.close();
+      await server.close();
+    });
+  });
+
   testWidgets('an unknown screen errors and the connection remains usable', (
     tester,
   ) async {
@@ -222,6 +264,13 @@ void main() {
     expect(restored, [true]);
     expect(platformCalls, isNot(contains('SystemNavigator.pop')));
   });
+}
+
+void _restoreResumedLifecycle(WidgetTester tester) {
+  if (tester.binding.lifecycleState == AppLifecycleState.resumed) return;
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
 }
 
 Future<void> _noop() async {}

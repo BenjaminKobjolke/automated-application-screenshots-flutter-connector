@@ -28,6 +28,7 @@ class LiveCapture {
   Future<Uint8List> capture(double pixelRatio, {bool full = false}) async {
     if (!full) return _still.capture(pixelRatio);
 
+    await _still.ensureForeground();
     await waitForSettledFrame();
     final scrollable = _findScrollable();
     if (scrollable == null || !scrollable.position.hasContentDimensions) {
