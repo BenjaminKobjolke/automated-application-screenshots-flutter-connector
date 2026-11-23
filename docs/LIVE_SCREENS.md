@@ -108,6 +108,10 @@ not navigate. `pixel_ratio` defaults to `1.0`. `navigate` runs `onPrepare`
 before opening the named screen, so the same command restores a screen after a
 reload or restart. `reset` runs `onPrepare` without opening another screen.
 
+A screenshot requested while the app is in the background waits up to 5 seconds
+for it to resume, then returns an `error` event containing
+`app is in the background`.
+
 `set_theme` accepts a `theme` (`dark` or `light`), calls the app-owned
 `AutomationDemoHost.onSetTheme` hook and replies with `theme_set` after the
 updated frame settles. Without a hook, it returns
