@@ -1,9 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:automated_screenshot_connector/automated_screenshot_connector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/demo_server.dart';
@@ -93,7 +92,13 @@ void main() {
           registry: DemoRegistry(),
           screens: LiveScreenRegistry(),
           onPrepare: (_, __) async => prepares++,
-          child: const MaterialApp(home: Scaffold(body: Text('Ready'))),
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: SizedBox(height: 1500, child: Text('Ready')),
+              ),
+            ),
+          ),
         ),
       );
       final connection = await accepted;
@@ -106,6 +111,32 @@ void main() {
       expect(screenshot['event'], 'screenshot');
       expect(screenshot['name'], 'ready');
       expect(png.sublist(0, 4), [0x89, 0x50, 0x4e, 0x47]);
+
+      final viewportHeight = _pngHeight(png);
+      final full = await sendAndRead(tester, connection, {
+        'command': 'screenshot',
+        'name': 'full',
+        'full': true,
+      });
+      expect(
+        _pngHeight(base64Decode(full['png'] as String)),
+        greaterThan(viewportHeight),
+      );
+      final failure = await sendAndRead(tester, connection, {
+        'command': 'screenshot',
+        'name': 'invalid',
+        'full': true,
+        'pixel_ratio': 0,
+      });
+      expect(failure['event'], 'error');
+      final restored = await sendAndRead(tester, connection, {
+        'command': 'screenshot',
+        'name': 'restored',
+      });
+      expect(
+        _pngHeight(base64Decode(restored['png'] as String)),
+        viewportHeight,
+      );
 
       expect(await sendAndRead(tester, connection, {'command': 'reset'}), {
         'event': 'reset_done',
@@ -274,3 +305,5 @@ void _restoreResumedLifecycle(WidgetTester tester) {
 }
 
 Future<void> _noop() async {}
+
+int _pngHeight(Uint8List png) => ByteData.sublistView(png).getUint32(20);

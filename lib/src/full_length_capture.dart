@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -39,7 +37,14 @@ class LiveCapture {
     try {
       scrollable.position.jumpTo(0);
       await waitForSettledFrame();
-      final maxLogicalHeight = _maxPhysicalPixels / pixelRatio;
+      final boundarySize = _boundary.size;
+      final maxBoundaryDimension = boundarySize.width > boundarySize.height
+          ? boundarySize.width
+          : boundarySize.height;
+      final effectivePixelRatio = pixelRatio
+          .clamp(0.0, _maxPhysicalPixels / maxBoundaryDimension)
+          .toDouble();
+      final maxLogicalHeight = _maxPhysicalPixels / effectivePixelRatio;
       final maxExtraHeight = (maxLogicalHeight - _boundary.size.height)
           .clamp(0.0, double.infinity)
           .toDouble();
@@ -53,7 +58,7 @@ class LiveCapture {
         _extraHeight.value = extraHeight;
         await waitForSettledFrame();
       }
-      return await _still.capture(pixelRatio);
+      return await _still.capture(effectivePixelRatio);
     } finally {
       _extraHeight.value = null;
       await waitForSettledFrame();
@@ -72,23 +77,9 @@ class LiveCapture {
     final context = _still.boundaryKey.currentContext;
     if (context == null) return null;
     final scrollables = <ScrollableState>[];
-    void visit(Element element) {
-      if (element is StatefulElement && element.state is ScrollableState) {
-        final state = element.state as ScrollableState;
-        final position = state.position;
-        final isVertical =
-            position.axisDirection == AxisDirection.down ||
-            position.axisDirection == AxisDirection.up;
-        if (isVertical &&
-            position.hasContentDimensions &&
-            ModalRoute.of(element)?.isCurrent != false) {
-          scrollables.add(state);
-        }
-      }
-      element.visitChildElements(visit);
-    }
-
-    context.visitChildElements(visit);
+    context.visitChildElements(
+      (element) => _collectScrollables(element, scrollables),
+    );
     if (scrollables.isEmpty) return null;
     scrollables.sort(
       (left, right) => right.position.maxScrollExtent.compareTo(
@@ -96,5 +87,25 @@ class LiveCapture {
       ),
     );
     return scrollables.first;
+  }
+
+  void _collectScrollables(Element element, List<ScrollableState> scrollables) {
+    if (element is StatefulElement && element.state is ScrollableState) {
+      final state = element.state as ScrollableState;
+      if (_isEligibleScrollable(element, state)) scrollables.add(state);
+    }
+    element.visitChildElements(
+      (child) => _collectScrollables(child, scrollables),
+    );
+  }
+
+  bool _isEligibleScrollable(Element element, ScrollableState state) {
+    final position = state.position;
+    final isVertical =
+        position.axisDirection == AxisDirection.down ||
+        position.axisDirection == AxisDirection.up;
+    return isVertical &&
+        position.hasContentDimensions &&
+        ModalRoute.of(element)?.isCurrent != false;
   }
 }
