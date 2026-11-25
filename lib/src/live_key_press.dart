@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
@@ -27,8 +28,21 @@ final class KeyPresser {
         ? _pressShiftTab()
         : _pressKey(_keyFor(key));
     if (key == LiveKey.escape && !handled) {
-      await WidgetsBinding.instance.handlePopRoute();
+      await _popRoute();
     }
+  }
+
+  // Same path a platform back press takes; handlePopRoute itself is test-only API.
+  Future<void> _popRoute() {
+    final replied = Completer<void>();
+    ui.channelBuffers.push(
+      SystemChannels.navigation.name,
+      SystemChannels.navigation.codec.encodeMethodCall(
+        const MethodCall('popRoute'),
+      ),
+      (_) => replied.complete(),
+    );
+    return replied.future;
   }
 
   EditableTextState? get _focusedEditableText => FocusManager
