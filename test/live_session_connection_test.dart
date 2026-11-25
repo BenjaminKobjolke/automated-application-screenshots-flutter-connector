@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/demo_server.dart';
-import 'demo_host_test.dart' show capturePlatformCalls, pumpUntil;
+import 'support/demo_host_support.dart' show capturePlatformCalls, pumpUntil;
 
 void main() {
   silenceLogger();
