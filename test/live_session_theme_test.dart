@@ -20,7 +20,7 @@ void main() {
           host: '$loopbackHost:${server.port}',
           registry: DemoRegistry(),
           screens: LiveScreenRegistry()..add([_screen()]),
-          onPrepare: (_, __) async => prepares++,
+          onPrepare: (_, _) async => prepares++,
           onSetTheme: (theme) async => themes.add(theme),
           child: const MaterialApp(home: Text('Home')),
         ),

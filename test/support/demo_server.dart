@@ -11,7 +11,6 @@ import 'dart:io';
 
 import 'package:automated_screenshot_connector/automated_screenshot_connector.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/widgets.dart';
 
 /// Silences connector logging for every test in the calling `main()`.
 void silenceLogger() => setUp(() => AppLogger.enabled = false);

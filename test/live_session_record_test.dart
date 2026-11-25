@@ -34,7 +34,7 @@ void main() {
           host: '$loopbackHost:${server.port}',
           registry: DemoRegistry(),
           screens: screens,
-          onPrepare: (_, __) async {
+          onPrepare: (_, _) async {
             calls.add('prepare');
           },
           child: const MaterialApp(home: Text('Home')),
@@ -125,7 +125,7 @@ void main() {
             host: '$loopbackHost:${server.port}',
             registry: DemoRegistry(),
             screens: screens,
-            onPrepare: (_, __) async {
+            onPrepare: (_, _) async {
               prepares++;
             },
             child: const MaterialApp(home: Text('Home')),

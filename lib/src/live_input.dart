@@ -40,7 +40,7 @@ final class TapTextInput extends LiveInput {
     final text = _requiredString(json, _InputJsonKeys.text);
     final rawIndex = json[_InputJsonKeys.index];
     if (rawIndex != null && (rawIndex is! int || rawIndex < 0)) {
-      throw FormatException('index must be a non-negative integer');
+      throw const FormatException('index must be a non-negative integer');
     }
     return TapTextInput(
       text: text,
@@ -81,7 +81,7 @@ final class TypeTextInput extends LiveInput {
   factory TypeTextInput.fromJson(Map<String, dynamic> json) {
     final rawField = json[_InputJsonKeys.field];
     if (rawField != null && (rawField is! String || rawField.isEmpty)) {
-      throw FormatException('field must be a non-empty string');
+      throw const FormatException('field must be a non-empty string');
     }
     return TypeTextInput(
       text: _requiredString(json, _InputJsonKeys.text),
@@ -121,7 +121,7 @@ enum TextMatch {
   static TextMatch parse(Object? value) => switch (value) {
     null || 'exact' => exact,
     'contains' => contains,
-    _ => throw FormatException('match must be "exact" or "contains"'),
+    _ => throw const FormatException('match must be "exact" or "contains"'),
   };
 }
 

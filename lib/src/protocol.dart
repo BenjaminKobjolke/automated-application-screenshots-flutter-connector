@@ -50,7 +50,7 @@ final class SetThemeCommand extends LiveCommand {
   factory SetThemeCommand.fromJson(Map<String, dynamic> json) {
     final theme = _parseTheme(json['theme']);
     if (theme == null) {
-      throw FormatException('set_theme command requires a theme');
+      throw const FormatException('set_theme command requires a theme');
     }
     return SetThemeCommand(theme: theme);
   }
@@ -140,7 +140,7 @@ final class NavigateCommand extends LiveCommand {
   factory NavigateCommand.fromJson(Map<String, dynamic> json) {
     final screen = json['screen'];
     if (screen is! String) {
-      throw FormatException('navigate command requires a string screen');
+      throw const FormatException('navigate command requires a string screen');
     }
     final rawRecordId = json['record_id'];
     if (rawRecordId != null && rawRecordId is! int) {
@@ -190,7 +190,7 @@ final class ScreenshotCommand extends LiveCommand {
   factory ScreenshotCommand.fromJson(Map<String, dynamic> json) {
     final name = json['name'];
     if (name is! String) {
-      throw FormatException('screenshot command requires a string name');
+      throw const FormatException('screenshot command requires a string name');
     }
     return ScreenshotCommand(
       name: name,

@@ -1,10 +1,7 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:automated_screenshot_connector/automated_screenshot_connector.dart';
-import 'package:automated_screenshot_connector/src/gesture_driver.dart';
 import 'package:automated_screenshot_connector/src/live_input_driver.dart';
-import 'package:automated_screenshot_connector/src/step_executor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -85,7 +82,7 @@ void main() {
       input: LiveInputDriver(
         steps: StepExecutor(
           still: StillCapture(key),
-          onStill: (_, __) {},
+          onStill: (_, _) {},
           actions: const {},
         ),
         reader: const VisibleTextReader(),

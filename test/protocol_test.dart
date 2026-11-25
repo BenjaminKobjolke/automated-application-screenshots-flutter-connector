@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:automated_screenshot_connector/automated_screenshot_connector.dart';
 import 'package:flutter/foundation.dart';

@@ -21,16 +21,12 @@ typedef ThemeCallback = Future<void> Function(Brightness brightness);
 class LiveSession {
   /// Creates a session with the app's registered screens and capture boundary.
   const LiveSession({
-    required LiveScreenRegistry screens,
-    required LiveCapture capture,
-    required LiveInputDriver input,
-    PrepareCallback? onPrepare,
-    ThemeCallback? onSetTheme,
-  }) : _screens = screens,
-       _capture = capture,
-       _input = input,
-       _onPrepare = onPrepare,
-       _onSetTheme = onSetTheme;
+    required this._screens,
+    required this._capture,
+    required this._input,
+    this._onPrepare,
+    this._onSetTheme,
+  });
 
   final LiveScreenRegistry _screens;
   final LiveCapture _capture;
@@ -79,7 +75,7 @@ class LiveSession {
     await waitForSettledFrame();
     if (sectionKey != null) {
       final context = sectionKey.currentContext;
-      if (context == null) {
+      if (context == null || !context.mounted) {
         throw StateError(
           'section "${command.section}" of screen "${command.screen}" is not built',
         );

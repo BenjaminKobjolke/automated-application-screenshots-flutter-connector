@@ -1,10 +1,7 @@
 import 'dart:ui';
 
 import 'package:automated_screenshot_connector/automated_screenshot_connector.dart';
-import 'package:automated_screenshot_connector/src/live_input.dart';
 import 'package:automated_screenshot_connector/src/live_input_driver.dart';
-import 'package:automated_screenshot_connector/src/protocol_events.dart';
-import 'package:automated_screenshot_connector/src/visible_text.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -236,7 +233,7 @@ VisibleTextEntry _entry(
   kind: kind,
   enabled: true,
   rect: Rect.fromLTWH(left, 0.1, 0.2, 0.1),
-  view: Rect.fromLTWH(0, 0, 1, 1),
+  view: const Rect.fromLTWH(0, 0, 1, 1),
   label: label,
   hint: hint,
   value: kind == VisibleTextKind.textField ? text : null,

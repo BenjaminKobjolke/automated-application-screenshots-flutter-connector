@@ -90,7 +90,7 @@ void main() {
           host: '$loopbackHost:${server.port}',
           registry: DemoRegistry(),
           screens: LiveScreenRegistry(),
-          onPrepare: (_, __) async => prepares++,
+          onPrepare: (_, _) async => prepares++,
           child: const MaterialApp(
             home: Scaffold(
               body: SingleChildScrollView(

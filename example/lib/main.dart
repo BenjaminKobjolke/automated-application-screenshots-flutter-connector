@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 
 import 'screens.dart';
 
-void main() => runApp(LiveScreensExample());
+void main() => runApp(const LiveScreensExample());
 
 /// Small Windows app that exposes named routes to the live screenshot tool.
 class LiveScreensExample extends StatefulWidget {
   /// Creates the example, optionally targeting a test listener.
-  LiveScreensExample({
+  const LiveScreensExample({
     super.key,
     this.host = const String.fromEnvironment(automationHostDefine),
   });
@@ -40,7 +40,7 @@ class _LiveScreensExampleState extends State<LiveScreensExample> {
           ? ThemeMode.dark
           : ThemeMode.light;
     },
-    onPrepare: (_, __) async {
+    onPrepare: (_, _) async {
       _navigatorKey.currentState?.pushAndRemoveUntil<void>(
         MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
         (_) => false,

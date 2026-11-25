@@ -132,7 +132,7 @@ final class LiveGesture {
 int _gestureDurationMs(Map<String, dynamic> json, GestureKind kind) {
   final durationMs = json[_GestureJsonKeys.durationMs];
   if (durationMs != null && (durationMs is! int || durationMs <= 0)) {
-    throw FormatException('duration_ms must be a positive integer');
+    throw const FormatException('duration_ms must be a positive integer');
   }
   if (durationMs is int) return durationMs;
   return kind == GestureKind.tap
@@ -151,11 +151,11 @@ double? _gestureScale(Map<String, dynamic> json, GestureKind kind) {
   if (kind != GestureKind.pinch) return null;
   final rawScale = json[_GestureJsonKeys.scale];
   if (rawScale is! num) {
-    throw FormatException('pinch scale must be a positive number');
+    throw const FormatException('pinch scale must be a positive number');
   }
   final scale = rawScale.toDouble();
   if (!scale.isFinite || scale <= 0) {
-    throw FormatException('pinch scale must be a positive number');
+    throw const FormatException('pinch scale must be a positive number');
   }
   return scale;
 }
@@ -164,13 +164,13 @@ double? _gestureScale(Map<String, dynamic> json, GestureKind kind) {
   final screen = json[_GestureJsonKeys.screen];
   final section = json[_GestureJsonKeys.section];
   if (screen != null && screen is! String) {
-    throw FormatException('screen must be a string');
+    throw const FormatException('screen must be a string');
   }
   if (section != null && section is! String) {
-    throw FormatException('section must be a string');
+    throw const FormatException('section must be a string');
   }
   if (section != null && screen == null) {
-    throw FormatException('section requires screen');
+    throw const FormatException('section requires screen');
   }
   return (screen: screen as String?, section: section as String?);
 }

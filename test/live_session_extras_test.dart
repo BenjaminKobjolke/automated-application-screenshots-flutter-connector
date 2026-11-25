@@ -38,7 +38,7 @@ void main() {
           host: '$loopbackHost:${server.port}',
           registry: DemoRegistry(),
           screens: screens,
-          onPrepare: (_, __) async => calls.add('prepare'),
+          onPrepare: (_, _) async => calls.add('prepare'),
           onSetTheme: (brightness) async => calls.add('theme:$brightness'),
           child: MaterialApp(
             navigatorKey: navigatorKey,
@@ -75,7 +75,7 @@ void main() {
             host: '$loopbackHost:${server.port}',
             registry: DemoRegistry(),
             screens: LiveScreenRegistry()..add([_screen('home', () async {})]),
-            onPrepare: (_, __) async => prepares++,
+            onPrepare: (_, _) async => prepares++,
             child: const MaterialApp(home: Text('Home')),
           ),
         );
